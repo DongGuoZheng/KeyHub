@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeyHub - 授权密钥管理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Header -->
+        <header class="main-header">
+            <div class="logo">
+                <h1>KeyHub</h1>
+                <span class="badge">v1.0</span>
+            </div>
+
+            <div class="project-selector">
+                <label for="projectSelect">当前项目</label>
+                <div class="select-wrapper">
+                    <select id="projectSelect">
+                        <option value="">加载中...</option>
+                    </select>
+                    <button id="addProjectBtn" title="新建项目">+</button>
+                </div>
+                <div class="project-actions">
+                    <button class="btn-text" id="editProjectBtn">编辑</button>
+                    <button class="btn-text" id="deleteProjectBtn">删除</button>
+                </div>
+            </div>
+
+            <div class="user-actions">
+                <button class="btn-text" id="logoutBtn" title="登出">🚪 登出</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="content-area">
+            <!-- Stats Row -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>总密钥数</h3>
+                    <p class="stat-value" id="statsTotal">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>已激活</h3>
+                    <p class="stat-value" id="statsActive">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>已绑定</h3>
+                    <p class="stat-value" id="statsBound">0</p>
+                </div>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="left">
+                    <h2>授权密钥列表</h2>
+                    <span id="projectDesc" class="subtitle">选择一个项目以管理密钥</span>
+                </div>
+                <div class="right">
+                    <button class="btn btn-secondary" id="refreshBtn">刷新</button>
+                    <button class="btn btn-primary" id="generateKeyBtn">生成密钥</button>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="table-container">
+                <table id="keysTable">
+                    <thead>
+                        <tr>
+                            <th>密钥 (Key)</th>
+                            <th>状态</th>
+                            <th>备注</th>
+                            <th>绑定数</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Rows injected by JS -->
+                    </tbody>
+                </table>
+                <div id="emptyState" class="empty-state" style="display: none;">
+                    该项目下暂无密钥。
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+
+    <!-- Create/Edit Project Modal -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="projectModalTitle">新建项目</h2>
+            <form id="projectForm">
+                <input type="hidden" id="projectId">
+                <div class="form-group">
+                    <label>项目名称</label>
+                    <input type="text" id="projectName" required>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="projectDescInput"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary close-btn">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Generate Key Modal -->
+    <div id="keyModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>生成新密钥</h2>
+            <form id="keyForm">
+                <div class="form-group">
+                    <label>备注 (可选)</label>
+                    <input type="text" id="keyRemarks" placeholder="例如：客户 A 授权">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary close-btn">取消</button>
+                    <button type="submit" class="btn btn-primary">生成</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bindings Modal -->
+    <div id="bindingsModal" class="modal">
+        <div class="modal-content large">
+            <span class="close">&times;</span>
+            <h2>机器绑定列表</h2>
+            <p class="subtitle" id="bindingKeyTitle">所属密钥: ...</p>
+
+            <div class="bindings-list" id="bindingsList">
+                <!-- List items injected -->
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary close-btn">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">操作成功</div>
+
+
+    <script>
+        // Check authentication before loading
+        if (!localStorage.getItem('adminToken')) {
+            window.location.href = '/login';
+        }
+    </script>
+    <script src="/static/js/script.js"></script>
+</body>
+
+</html>
