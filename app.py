@@ -64,6 +64,14 @@ def index():
 def login_page():
     return render_template('login.html')
 
+@app.route('/admin')
+def admin_page():
+    return render_template('admin.html')
+
+@app.route('/docs')
+def docs_page():
+    return render_template('docs.html')
+
 # --- Authentication API ---
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -341,6 +349,136 @@ def verify_key():
         except Exception as e:
             conn.close()
             return jsonify({'valid': False, 'message': f'绑定失败: {str(e)}'}), 500
+
+# --- Admin Management API ---
+@app.route('/api/admin/users', methods=['GET'])
+@require_admin_token
+def get_admin_users():
+    """Get all admin users"""
+    conn = get_db_connection()
+    users = conn.execute('SELECT id, username, created_at FROM admin_users ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return jsonify([dict(u) for u in users])
+
+@app.route('/api/admin/users', methods=['POST'])
+@require_admin_token
+def create_admin_user():
+    """Create a new admin user"""
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({'error': '用户名和密码不能为空'}), 400
+    
+    conn = get_db_connection()
+    try:
+        # Check if username already exists
+        existing = conn.execute('SELECT id FROM admin_users WHERE username = ?', (username,)).fetchone()
+        if existing:
+            conn.close()
+            return jsonify({'error': '用户名已存在'}), 400
+        
+        now = datetime.datetime.now().isoformat()
+        conn.execute('INSERT INTO admin_users (username, password, created_at) VALUES (?, ?, ?)',
+                     (username, password, now))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': '管理员创建成功'})
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': f'创建失败: {str(e)}'}), 500
+
+@app.route('/api/admin/users/<username>', methods=['DELETE'])
+@require_admin_token
+def delete_admin_user(username):
+    """Delete an admin user"""
+    conn = get_db_connection()
+    
+    # Check if it's the default admin
+    if username == 'admin':
+        conn.close()
+        return jsonify({'error': '不能删除默认管理员账户'}), 403
+    
+    # Check if it's the last admin
+    admin_count = conn.execute('SELECT COUNT(*) as count FROM admin_users').fetchone()['count']
+    if admin_count <= 1:
+        conn.close()
+        return jsonify({'error': '不能删除最后一个管理员账户'}), 403
+    
+    # Check if user exists
+    user = conn.execute('SELECT id FROM admin_users WHERE username = ?', (username,)).fetchone()
+    if not user:
+        conn.close()
+        return jsonify({'error': '用户不存在'}), 404
+    
+    conn.execute('DELETE FROM admin_users WHERE username = ?', (username,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'message': '管理员已删除'})
+
+@app.route('/api/admin/users/<username>', methods=['PUT'])
+@require_admin_token
+def update_admin_username(username):
+    """Update admin username"""
+    data = request.json
+    new_username = data.get('new_username')
+    
+    if not new_username:
+        return jsonify({'error': '新用户名不能为空'}), 400
+    
+    if username == 'admin':
+        return jsonify({'error': '不能修改默认管理员的用户名'}), 403
+    
+    conn = get_db_connection()
+    
+    # Check if user exists
+    user = conn.execute('SELECT id FROM admin_users WHERE username = ?', (username,)).fetchone()
+    if not user:
+        conn.close()
+        return jsonify({'error': '用户不存在'}), 404
+    
+    # Check if new username already exists
+    existing = conn.execute('SELECT id FROM admin_users WHERE username = ?', (new_username,)).fetchone()
+    if existing:
+        conn.close()
+        return jsonify({'error': '新用户名已存在'}), 400
+    
+    try:
+        conn.execute('UPDATE admin_users SET username = ? WHERE username = ?', (new_username, username))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': '用户名已更新'})
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': f'更新失败: {str(e)}'}), 500
+
+@app.route('/api/admin/users/<username>/password', methods=['PUT'])
+@require_admin_token
+def update_admin_password(username):
+    """Update admin password"""
+    data = request.json
+    new_password = data.get('new_password')
+    
+    if not new_password:
+        return jsonify({'error': '新密码不能为空'}), 400
+    
+    conn = get_db_connection()
+    
+    # Check if user exists
+    user = conn.execute('SELECT id FROM admin_users WHERE username = ?', (username,)).fetchone()
+    if not user:
+        conn.close()
+        return jsonify({'error': '用户不存在'}), 404
+    
+    try:
+        conn.execute('UPDATE admin_users SET password = ? WHERE username = ?', (new_password, username))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': '密码已更新'})
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': f'更新失败: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

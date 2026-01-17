@@ -248,12 +248,12 @@ function renderKeys(keys) {
         const statusText = key.is_active ? '已激活' : '已禁用';
 
         tr.innerHTML = `
-            <td><span class="key-mono">${key.key}</span></td>
-            <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-            <td>${key.remarks || '-'}</td>
-            <td>${key.binding_count}</td>
-            <td>${createdDate}</td>
-            <td class="actions-cell">
+            <td data-label="密钥"><span class="key-mono">${key.key}</span></td>
+            <td data-label="状态"><span class="status-badge ${statusClass}">${statusText}</span></td>
+            <td data-label="备注">${key.remarks || '-'}</td>
+            <td data-label="绑定数">${key.binding_count}</td>
+            <td data-label="创建时间">${createdDate}</td>
+            <td class="actions-cell" data-label="操作">
                <!-- To be filled by JS for event binding safely -->
             </td>
         `;

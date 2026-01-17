@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员管理 - KeyHub</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="logo">
+                <h1>KeyHub</h1>
+                <span class="badge">v1.0</span>
+            </div>
+
+            <nav class="nav-menu">
+                <a href="/" class="nav-link">密钥管理</a>
+                <a href="/admin" class="nav-link active">管理员管理</a>
+                <a href="/docs" class="nav-link">API文档</a>
+            </nav>
+
+            <div class="user-actions">
+                <button class="btn-text" id="logoutBtn" title="登出">🚪 登出</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="content-area">
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="left">
+                    <h2>管理员账户管理</h2>
+                    <span class="subtitle">管理系统管理员账户</span>
+                </div>
+                <div class="right">
+                    <button class="btn btn-secondary" id="refreshBtn">刷新</button>
+                    <button class="btn btn-primary" id="addAdminBtn">新增管理员</button>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="table-container">
+                <table id="adminsTable">
+                    <thead>
+                        <tr>
+                            <th>用户名</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Rows injected by JS -->
+                    </tbody>
+                </table>
+                <div id="emptyState" class="empty-state" style="display: none;">
+                    暂无管理员账户。
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+
+    <!-- Add Admin Modal -->
+    <div id="addAdminModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>新增管理员</h2>
+            <form id="addAdminForm">
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="addUsername" required>
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" id="addPassword" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary close-btn">取消</button>
+                    <button type="submit" class="btn btn-primary">创建</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Username Modal -->
+    <div id="editUsernameModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>修改用户名</h2>
+            <form id="editUsernameForm">
+                <input type="hidden" id="editOldUsername">
+                <div class="form-group">
+                    <label>当前用户名</label>
+                    <input type="text" id="editCurrentUsername" disabled>
+                </div>
+                <div class="form-group">
+                    <label>新用户名</label>
+                    <input type="text" id="editNewUsername" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary close-btn">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>修改密码</h2>
+            <form id="changePasswordForm">
+                <input type="hidden" id="changePasswordUsername">
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="changePasswordUsernameDisplay" disabled>
+                </div>
+                <div class="form-group">
+                    <label>新密码</label>
+                    <input type="password" id="changeNewPassword" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary close-btn">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">操作成功</div>
+
+    <script>
+        // Check authentication before loading
+        if (!localStorage.getItem('adminToken')) {
+            window.location.href = '/login';
+        }
+    </script>
+    <script src="/static/js/admin.js"></script>
+</body>
+
+</html>
