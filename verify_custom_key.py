@@ -5,7 +5,8 @@ import os
 
 # Configuration
 BASE_URL = "http://localhost:5000"
-DB_PATH = "keyhub.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "db", "keyhub.db")
 
 
 def get_admin_token():

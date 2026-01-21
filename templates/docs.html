@@ -237,10 +237,10 @@
                                     <td>用户密钥（可以是手机号、用户ID、邮箱等）</td>
                                 </tr>
                                 <tr>
-                                    <td><code>project_id</code></td>
-                                    <td>Integer</td>
-                                    <td>否</td>
-                                    <td>项目ID（不指定则使用默认项目）</td>
+                                    <td><code>project_name</code></td>
+                                    <td>String</td>
+                                    <td>是</td>
+                                    <td>项目名称（必须指定，使用项目名代替项目ID）</td>
                                 </tr>
                                 <tr>
                                     <td><code>remarks</code></td>
@@ -258,23 +258,24 @@
                             <span>JSON</span>
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
-                        <pre><code>// 使用手机号注册（默认项目）
+                        <pre><code>// 使用手机号注册指定项目
 {
     "key": "13800138000",
+    "project_name": "Default Project",
     "remarks": "张三"
 }
 
 // 使用用户ID注册并指定项目
 {
     "custom_key": "user_12345",
-    "project_id": 2,
+    "project_name": "Mobile App",
     "remarks": "VIP用户"
 }
 
 // 使用邮箱注册
 {
     "key": "user@example.com",
-    "project_id": 1,
+    "project_name": "Web Portal",
     "remarks": "企业用户"
 }</code></pre>
                     </div>
@@ -300,7 +301,7 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "error": "该用户已注册（密钥已存在）"
+    "message": "该用户已注册（密钥已存在）"
 }</code></pre>
                     </div>
 
@@ -311,7 +312,7 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "error": "密钥不能为空"
+    "message": "密钥不能为空"
 }</code></pre>
                     </div>
 
@@ -322,7 +323,7 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "error": "指定的项目不存在"
+    "message": "指定的项目不存在"
 }</code></pre>
                     </div>
                 </section>

@@ -3,10 +3,20 @@ import datetime
 import hashlib
 import os
 
-DB_NAME = 'keyhub.db'
+# Database path moved into dedicated folder to keep data isolated
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_DIR = os.path.join(BASE_DIR, "db")
+LEGACY_DB_PATH = os.path.join(BASE_DIR, "keyhub.db")
+DB_PATH = os.path.join(DB_DIR, "keyhub.db")
+
+# Ensure db directory exists and migrate old db file if necessary
+os.makedirs(DB_DIR, exist_ok=True)
+if os.path.exists(LEGACY_DB_PATH) and not os.path.exists(DB_PATH):
+    os.replace(LEGACY_DB_PATH, DB_PATH)
+
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys = ON')
     return conn

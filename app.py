@@ -288,36 +288,28 @@ def create_key():
 @app.route("/api/register", methods=["POST"])
 def register_user():
     """Public endpoint for client-side user registration with custom key"""
-    data = request.json
+    data = request.json or {}
     custom_key = data.get("key") or data.get("custom_key")
     remarks = data.get("remarks", "")
-    project_id = data.get(
-        "project_id"
-    )  # Optional: specify which project to register to
+    project_name = data.get("project_name")
 
     if not custom_key:
-        return jsonify({"error": "密钥不能为空"}), 400
+        return jsonify({"success": False, "message": "密钥不能为空"}), 400
+
+    if not project_name:
+        return jsonify({"success": False, "message": "项目名称必填"}), 400
 
     conn = get_db_connection()
 
-    # If project_id is provided, use it; otherwise use default project
-    if project_id:
-        # Verify project exists
-        project = conn.execute(
-            "SELECT id FROM projects WHERE id = ?", (project_id,)
-        ).fetchone()
-        if not project:
-            conn.close()
-            return jsonify({"error": "指定的项目不存在"}), 404
-    else:
-        # Get default project or first available project
-        project = conn.execute(
-            "SELECT id FROM projects ORDER BY is_default DESC, id ASC LIMIT 1"
-        ).fetchone()
-        if not project:
-            conn.close()
-            return jsonify({"error": "系统配置错误：无可用项目"}), 500
-        project_id = project["id"]
+    # Require explicit project name to locate the target project
+    project = conn.execute(
+        "SELECT id FROM projects WHERE name = ?", (project_name,)
+    ).fetchone()
+    if not project:
+        conn.close()
+        return jsonify({"success": False, "message": "指定的项目不存在"}), 404
+
+    project_id = project["id"]
 
     # Create key with custom value
     try:
@@ -330,7 +322,10 @@ def register_user():
         return jsonify({"success": True, "key": custom_key, "message": "注册成功"}), 201
     except sqlite3.IntegrityError:
         conn.close()
-        return jsonify({"error": "该用户已注册（密钥已存在）"}), 409
+        return jsonify({"success": False, "message": "该用户已注册（密钥已存在）"}), 409
+    except Exception as exc:
+        conn.close()
+        return jsonify({"success": False, "message": f"注册失败: {exc}"}), 500
 
 
 @app.route("/api/keys/<key_value>", methods=["DELETE"])
