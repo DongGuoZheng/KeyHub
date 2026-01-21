@@ -304,13 +304,15 @@ async function handleKeySubmit(e) {
     if (!currentProject) return;
 
     const remarks = document.getElementById('keyRemarks').value;
+    const customKey = document.getElementById('customKeyInput').value;
 
     try {
         const res = await apiRequest('/api/keys', {
             method: 'POST',
             body: JSON.stringify({
                 project_id: currentProject.id,
-                remarks
+                remarks,
+                custom_key: customKey
             })
         });
 
@@ -321,6 +323,7 @@ async function handleKeySubmit(e) {
         showToast('密钥生成成功');
         loadKeys();
         document.getElementById('keyRemarks').value = ''; // Reset
+        document.getElementById('customKeyInput').value = ''; // Reset
     } catch (e) {
         showToast(e.message);
     }

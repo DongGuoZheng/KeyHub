@@ -45,6 +45,7 @@
                         <li><a href="#request-example">请求示例</a></li>
                         <li><a href="#response-params">返回参数</a></li>
                         <li><a href="#response-examples">响应示例</a></li>
+                        <li><a href="#admin-api">用户注册接口</a></li>
                         <li><a href="#integration">集成建议</a></li>
                     </ul>
                 </nav>
@@ -109,6 +110,12 @@
                         </div>
                         <pre><code>{
     "key": "KH-A1B2C3D4-E5F6G7H8",
+    "machine_id": "CPU-8888-9999-UUID"
+}
+
+// 自定义密钥示例
+{
+    "key": "13800138000",
     "machine_id": "CPU-8888-9999-UUID"
 }</code></pre>
                     </div>
@@ -198,11 +205,135 @@
                     </div>
                 </section>
 
+                <section id="admin-api">
+                    <h2>用户注册接口 (公开)</h2>
+                    <p>用于客户端用户自助注册，无需管理员权限。</p>
+
+                    <div class="info-box">
+                        <h3>接口信息</h3>
+                        <ul>
+                            <li><strong>地址:</strong> <code>POST /api/register</code></li>
+                            <li><strong>认证:</strong> 无需认证（公开接口）</li>
+                            <li><strong>数据格式:</strong> <code>application/json</code></li>
+                        </ul>
+                    </div>
+
+                    <h3>请求参数</h3>
+                    <div class="table-wrapper">
+                        <table class="params-table">
+                            <thead>
+                                <tr>
+                                    <th>参数名</th>
+                                    <th>类型</th>
+                                    <th>必填</th>
+                                    <th>说明</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>key</code> 或 <code>custom_key</code></td>
+                                    <td>String</td>
+                                    <td>是</td>
+                                    <td>用户密钥（可以是手机号、用户ID、邮箱等）</td>
+                                </tr>
+                                <tr>
+                                    <td><code>project_id</code></td>
+                                    <td>Integer</td>
+                                    <td>否</td>
+                                    <td>项目ID（不指定则使用默认项目）</td>
+                                </tr>
+                                <tr>
+                                    <td><code>remarks</code></td>
+                                    <td>String</td>
+                                    <td>否</td>
+                                    <td>备注信息（如用户昵称）</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h3>请求示例</h3>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>JSON</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>// 使用手机号注册（默认项目）
+{
+    "key": "13800138000",
+    "remarks": "张三"
+}
+
+// 使用用户ID注册并指定项目
+{
+    "custom_key": "user_12345",
+    "project_id": 2,
+    "remarks": "VIP用户"
+}
+
+// 使用邮箱注册
+{
+    "key": "user@example.com",
+    "project_id": 1,
+    "remarks": "企业用户"
+}</code></pre>
+                    </div>
+
+                    <h3>响应示例</h3>
+                    <div class="status-badge success">状态码: 201 Created（注册成功）</div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>JSON</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "success": true,
+    "key": "13800138000",
+    "message": "注册成功"
+}</code></pre>
+                    </div>
+
+                    <div class="status-badge error">状态码: 409 Conflict（用户已存在）</div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>JSON</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "error": "该用户已注册（密钥已存在）"
+}</code></pre>
+                    </div>
+
+                    <div class="status-badge error">状态码: 400 Bad Request（参数错误）</div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>JSON</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "error": "密钥不能为空"
+}</code></pre>
+                    </div>
+
+                    <div class="status-badge error">状态码: 404 Not Found（项目不存在）</div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>JSON</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "error": "指定的项目不存在"
+}</code></pre>
+                    </div>
+                </section>
+
                 <section id="integration">
                     <h2>集成建议</h2>
                     <div class="tips-box">
                         <ol>
                             <li><strong>机器码获取:</strong> 建议使用 CPU ID 或 主板序列号生成的哈希值作为 <code>machine_id</code>。</li>
+                            <li><strong>用户注册:</strong> 客户端可以使用 <code>/api/register</code>
+                                接口让用户自助注册，使用手机号、邮箱或用户ID作为密钥。验证逻辑在客户端自行实现。</li>
                             <li><strong>频率控制:</strong> 验证请求不宜过于频繁，建议在程序启动时验证一次，之后每隔数小时在后台静默验证。</li>
                             <li><strong>超时处理:</strong> 客户端应处理网络超时或服务器宕机的情况，建议在这种情况下设置一定的宽限期。</li>
                         </ol>
