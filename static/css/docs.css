@@ -314,6 +314,124 @@ pre code {
     color: var(--danger-color);
 }
 
+/* API Endpoint */
+.api-endpoint {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+}
+
+.endpoint-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.method {
+    display: inline-block;
+    padding: 0.3rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.method.post {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success-color);
+}
+
+.method.get {
+    background: rgba(99, 102, 241, 0.2);
+    color: var(--accent-color);
+}
+
+.method.put {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+}
+
+.method.delete {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--danger-color);
+}
+
+.endpoint-url {
+    font-family: 'Fira Code', 'Courier New', monospace;
+    font-size: 1rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.endpoint-desc {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+/* Warning Box */
+.warning-box {
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid #fbbf24;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+}
+
+.warning-box strong {
+    color: #fbbf24;
+    display: block;
+    margin-bottom: 0.75rem;
+}
+
+.warning-box ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.warning-box li {
+    margin: 0.75rem 0;
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+.warning-box li::before {
+    content: "⚠️ ";
+    margin-right: 0.5rem;
+}
+
+/* Steps Box */
+.steps-box {
+    background: rgba(99, 102, 241, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+}
+
+.steps-box ol {
+    margin: 0;
+    padding-left: 1.5rem;
+}
+
+.steps-box li {
+    margin: 1rem 0;
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+.docs-content h4 {
+    font-size: 1.1rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
     .docs-layout {

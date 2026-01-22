@@ -23,7 +23,7 @@ def require_admin_token(f):
     def decorated_function(*args, **kwargs):
         token = request.headers.get("X-Admin-Token")
         if not token:
-            return jsonify({"error": "未授权访问"}), 401
+            return jsonify({"message": "未授权访问"}), 401
 
         # Validate token by checking if it matches any user's token
         conn = get_db_connection()
@@ -38,7 +38,7 @@ def require_admin_token(f):
                 break
 
         if not valid:
-            return jsonify({"error": "未授权访问"}), 401
+            return jsonify({"message": "未授权访问"}), 401
         return f(*args, **kwargs)
 
     return decorated_function
@@ -90,7 +90,7 @@ def login():
     password = data.get("password")
 
     if not username or not password:
-        return jsonify({"error": "用户名和密码不能为空"}), 400
+        return jsonify({"message": "用户名和密码不能为空"}), 400
 
     # Check username and password directly (plain text)
     conn = get_db_connection()
@@ -103,9 +103,9 @@ def login():
     if user:
         # Generate token using username and plain password
         token = generate_admin_token(username, password)
-        return jsonify({"success": True, "token": token})
+        return jsonify({"success": True, "token": token, "message": "登录成功"})
     else:
-        return jsonify({"error": "用户名或密码错误"}), 401
+        return jsonify({"message": "用户名或密码错误"}), 401
 
 
 # --- Projects API ---
@@ -127,7 +127,7 @@ def create_project():
     name = data.get("name")
     description = data.get("description", "")
     if not name:
-        return jsonify({"error": "项目名称必填"}), 400
+        return jsonify({"message": "项目名称必填"}), 400
 
     conn = get_db_connection()
     try:
@@ -138,9 +138,9 @@ def create_project():
         conn.commit()
     except sqlite3.IntegrityError:
         conn.close()
-        return jsonify({"error": "项目名称已存在"}), 400
+        return jsonify({"message": "项目名称已存在"}), 400
     conn.close()
-    return jsonify({"success": True})
+    return jsonify({"success": True, "message": "项目创建成功"})
 
 
 @app.route("/api/projects/<int:id>", methods=["PUT"])
@@ -157,7 +157,7 @@ def update_project(id):
     ).fetchone()
     if not proj:
         conn.close()
-        return jsonify({"error": "未找到项目"}), 404
+        return jsonify({"message": "未找到项目"}), 404
 
     # Can't change default project? Spec says "Default project cannot be deleted", doesn't explicitly say not editable, but let's allow content edit.
 
@@ -179,10 +179,10 @@ def update_project(id):
             conn.commit()
     except sqlite3.IntegrityError:
         conn.close()
-        return jsonify({"error": "名称冲突"}), 400
+        return jsonify({"message": "名称冲突"}), 400
 
     conn.close()
-    return jsonify({"success": True})
+    return jsonify({"success": True, "message": "项目已更新"})
 
 
 @app.route("/api/projects/<int:id>", methods=["DELETE"])
@@ -194,43 +194,38 @@ def delete_project(id):
     ).fetchone()
     if not proj:
         conn.close()
-        return jsonify({"error": "未找到项目"}), 404
+        return jsonify({"message": "未找到项目"}), 404
 
     if proj["is_default"]:
         conn.close()
-        return jsonify({"error": "无法删除默认项目"}), 403
+        return jsonify({"message": "无法删除默认项目"}), 403
 
     conn.execute("DELETE FROM projects WHERE id = ?", (id,))
     conn.commit()
-    conn.close()  # Cascade delete should handle keys if configured, but need to enable foreign keys in sqlite
-    # SQLite by default doesn't enforce FK unless PRAGMA foreign_keys = ON;
-    # Let's fix that in connection or just ensure we clean up.
-    # For now, assuming simple delete is fine or we manually clean.
-    # Actually, easier to enable foreign keys in get_db_connection
-    return jsonify({"success": True})
+    conn.close()
+    return jsonify({"success": True, "message": "项目已删除"})
 
 
-# --- Keys API ---
+# --- Licenses API (formerly Keys API) ---
 @app.route("/api/keys", methods=["GET"])
 @require_admin_token
 def get_keys():
     project_id = request.args.get("project_id")
     conn = get_db_connection()
     query = """
-        SELECT k.*, 
-               (SELECT COUNT(*) FROM machine_bindings WHERE key_value = k.key) as binding_count 
-        FROM keys k 
+        SELECT l.*
+        FROM licenses l 
     """
     params = []
     if project_id:
-        query += " WHERE k.project_id = ?"
+        query += " WHERE l.project_id = ?"
         params.append(project_id)
 
-    query += " ORDER BY k.created_at DESC"
+    query += " ORDER BY l.created_at DESC"
 
-    keys = conn.execute(query, params).fetchall()
+    licenses = conn.execute(query, params).fetchall()
     conn.close()
-    return jsonify([dict(k) for k in keys])
+    return jsonify([dict(l) for l in licenses])
 
 
 @app.route("/api/keys", methods=["POST"])
@@ -239,55 +234,54 @@ def create_key():
     data = request.json
     project_id = data.get("project_id")
     remarks = data.get("remarks", "")
-    count = data.get(
-        "count", 1
-    )  # Optional: generate multiple (not in spec but useful) -> Spec says "One click generate", usually implies single.
-
     custom_key = data.get("custom_key")
 
     if not project_id:
-        return jsonify({"error": "项目 ID 必填"}), 400
+        return jsonify({"message": "项目 ID 必填"}), 400
 
     conn = get_db_connection()
 
     if custom_key:
         # User provided custom key
         new_key = custom_key
-        try:
-            conn.execute(
-                "INSERT INTO keys (key, created_at, is_active, remarks, project_id) VALUES (?, ?, 1, ?, ?)",
-                (new_key, datetime.datetime.now().isoformat(), remarks, project_id),
-            )
-            conn.commit()
-        except sqlite3.IntegrityError:
-            conn.close()
-            return jsonify({"error": "自定义密钥已存在"}), 400
     else:
         # Auto-generate key
         new_key = generate_key()
-        # Ensure uniqueness (simple retry logic)
-        for _ in range(5):
-            try:
-                conn.execute(
-                    "INSERT INTO keys (key, created_at, is_active, remarks, project_id) VALUES (?, ?, 1, ?, ?)",
-                    (new_key, datetime.datetime.now().isoformat(), remarks, project_id),
-                )
-                conn.commit()
-                break
-            except sqlite3.IntegrityError:
-                new_key = generate_key()
-        else:
-            conn.close()
-            return jsonify({"error": "生成唯一密钥失败"}), 500
+
+    # Ensure uniqueness (simple retry logic)
+    for attempt in range(5):
+        try:
+            conn.execute(
+                """INSERT INTO licenses (
+                    project_id, license_key, 
+                    is_active, remarks, created_at
+                ) VALUES (?, ?, 1, ?, ?)""",
+                (
+                    project_id,
+                    new_key,
+                    remarks,
+                    datetime.datetime.now().isoformat(),
+                ),
+            )
+            conn.commit()
+            break
+        except sqlite3.IntegrityError:
+            if custom_key:
+                conn.close()
+                return jsonify({"message": "该密钥在此项目中已存在"}), 400
+            new_key = generate_key()
+    else:
+        conn.close()
+        return jsonify({"message": "生成唯一密钥失败"}), 500
 
     conn.close()
-    return jsonify({"success": True, "key": new_key})
+    return jsonify({"success": True, "key": new_key, "message": "授权创建成功"})
 
 
 # --- Public Registration API (No Auth Required) ---
 @app.route("/api/register", methods=["POST"])
 def register_user():
-    """Public endpoint for client-side user registration with custom key"""
+    """Public endpoint for client-side user registration"""
     data = request.json or {}
     custom_key = data.get("key") or data.get("custom_key")
     remarks = data.get("remarks", "")
@@ -311,33 +305,45 @@ def register_user():
 
     project_id = project["id"]
 
-    # Create key with custom value
+    # Create license with custom key
     try:
         conn.execute(
-            "INSERT INTO keys (key, created_at, is_active, remarks, project_id) VALUES (?, ?, 1, ?, ?)",
-            (custom_key, datetime.datetime.now().isoformat(), remarks, project_id),
+            """INSERT INTO licenses (
+                project_id, license_key, 
+                is_active, remarks, created_at
+            ) VALUES (?, ?, 1, ?, ?)""",
+            (
+                project_id,
+                custom_key,
+                remarks,
+                datetime.datetime.now().isoformat(),
+            ),
         )
         conn.commit()
         conn.close()
         return jsonify({"success": True, "key": custom_key, "message": "注册成功"}), 201
     except sqlite3.IntegrityError:
         conn.close()
-        return jsonify({"success": False, "message": "该用户已注册（密钥已存在）"}), 409
+        return jsonify({"success": False, "message": "该密钥在此项目中已存在"}), 409
     except Exception as exc:
         conn.close()
-        return jsonify({"success": False, "message": f"注册失败: {exc}"}), 500
+        return jsonify({"success": False, "message": f"注册失败: {str(exc)}"}), 500
 
 
 @app.route("/api/keys/<key_value>", methods=["DELETE"])
 @require_admin_token
 def delete_key(key_value):
     conn = get_db_connection()
-    # Manual cascade if FK not enabled, but good practice
-    conn.execute("DELETE FROM machine_bindings WHERE key_value = ?", (key_value,))
-    conn.execute("DELETE FROM keys WHERE key = ?", (key_value,))
+    # Find the license by license_key (need to check project_id from query or handle all)
+    # For simplicity, delete by license_key (assuming it's unique enough, or we need project_id)
+    project_id = request.args.get("project_id")
+    if project_id:
+        conn.execute("DELETE FROM licenses WHERE license_key = ? AND project_id = ?", (key_value, project_id))
+    else:
+        conn.execute("DELETE FROM licenses WHERE license_key = ?", (key_value,))
     conn.commit()
     conn.close()
-    return jsonify({"success": True})
+    return jsonify({"success": True, "message": "授权已删除"})
 
 
 @app.route("/api/keys/<key_value>/status", methods=["PUT"])
@@ -346,16 +352,23 @@ def toggle_key_status(key_value):
     data = request.json
     is_active = data.get("is_active")
     if is_active is None:
-        return jsonify({"error": "缺少状态参数"}), 400
+        return jsonify({"message": "缺少状态参数"}), 400
 
     conn = get_db_connection()
-    conn.execute(
-        "UPDATE keys SET is_active = ? WHERE key = ?",
-        (1 if is_active else 0, key_value),
-    )
+    project_id = request.args.get("project_id")
+    if project_id:
+        conn.execute(
+            "UPDATE licenses SET is_active = ? WHERE license_key = ? AND project_id = ?",
+            (1 if is_active else 0, key_value, project_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE licenses SET is_active = ? WHERE license_key = ?",
+            (1 if is_active else 0, key_value),
+        )
     conn.commit()
     conn.close()
-    return jsonify({"success": True})
+    return jsonify({"success": True, "message": "状态已更新"})
 
 
 @app.route("/api/keys/<key_value>/remarks", methods=["PUT"])
@@ -365,98 +378,56 @@ def update_key_remarks(key_value):
     remarks = data.get("remarks", "")
 
     conn = get_db_connection()
-    conn.execute("UPDATE keys SET remarks = ? WHERE key = ?", (remarks, key_value))
+    project_id = request.args.get("project_id")
+    if project_id:
+        conn.execute("UPDATE licenses SET remarks = ? WHERE license_key = ? AND project_id = ?", 
+                    (remarks, key_value, project_id))
+    else:
+        conn.execute("UPDATE licenses SET remarks = ? WHERE license_key = ?", (remarks, key_value))
     conn.commit()
     conn.close()
-    return jsonify({"success": True})
+    return jsonify({"success": True, "message": "备注已更新"})
 
 
-# --- Bindings API ---
-@app.route("/api/keys/<key_value>/bindings", methods=["GET"])
-@require_admin_token
-def get_bindings(key_value):
-    conn = get_db_connection()
-    bindings = conn.execute(
-        "SELECT * FROM machine_bindings WHERE key_value = ?", (key_value,)
-    ).fetchall()
-    conn.close()
-    return jsonify([dict(b) for b in bindings])
-
-
-@app.route("/api/bindings/<int:id>", methods=["DELETE"])
-@require_admin_token
-def unbind_machine(id):
-    conn = get_db_connection()
-    conn.execute("DELETE FROM machine_bindings WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True})
-
-
-@app.route("/api/bindings/<int:id>/remarks", methods=["PUT"])
-@require_admin_token
-def update_binding_remarks(id):
-    data = request.json
-    remarks = data.get("remarks", "")
-    conn = get_db_connection()
-    conn.execute("UPDATE machine_bindings SET remarks = ? WHERE id = ?", (remarks, id))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True})
-
-
-# --- Verification API (Core Logic) ---
+# --- Verification API (Simplified, No Machine Binding) ---
 @app.route("/api/verify", methods=["POST"])
 def verify_key():
     data = request.json
     key_value = data.get("key")
-    machine_id = data.get("machine_id")
+    project_name = data.get("project_name")
 
-    if not key_value or not machine_id:
-        return jsonify({"valid": False, "message": "缺少必要参数"}), 400
+    if not key_value:
+        return jsonify({"valid": False, "message": "密钥不能为空"}), 400
+
+    if not project_name:
+        return jsonify({"valid": False, "message": "项目名称不能为空"}), 400
 
     conn = get_db_connection()
 
-    # 1. Fetch Key Info - 在所有项目里查找密钥
+    # Fetch license info by license_key and project_name
     query = """
-        SELECT k.key, k.is_active
-        FROM keys k
-        WHERE k.key = ?
+        SELECT l.*, p.name as project_name
+        FROM licenses l
+        JOIN projects p ON l.project_id = p.id
+        WHERE l.license_key = ? AND p.name = ?
     """
-    key_row = conn.execute(query, (key_value,)).fetchone()
+    license_row = conn.execute(query, (key_value, project_name)).fetchone()
 
-    if not key_row:
+    if not license_row:
         conn.close()
-        return jsonify({"valid": False, "message": "未找到密钥"}), 404
+        return jsonify({"valid": False, "message": "未找到该密钥在此项目下的授权"}), 404
 
-    # 2. Check Active Status
-    if not key_row["is_active"]:
+    # Check Active Status
+    if not license_row["is_active"]:
         conn.close()
-        return jsonify({"valid": False, "message": "密钥已禁用"}), 403
+        return jsonify({"valid": False, "message": "授权已禁用"}), 403
 
-    # 3. Check Binding
-    binding = conn.execute(
-        "SELECT * FROM machine_bindings WHERE key_value = ? AND machine_id = ?",
-        (key_value, machine_id),
-    ).fetchone()
-
-    if binding:
-        conn.close()
-        return jsonify({"valid": True, "message": "验证通过 (已绑定)"})
-    else:
-        # 4. Bind if not bound
-        # Requirement: "No limit on bindings" -> Just insert new binding
-        try:
-            conn.execute(
-                "INSERT INTO machine_bindings (key_value, machine_id, bound_at) VALUES (?, ?, ?)",
-                (key_value, machine_id, datetime.datetime.now().isoformat()),
-            )
-            conn.commit()
-            conn.close()
-            return jsonify({"valid": True, "message": "验证通过 (新绑定已创建)"})
-        except Exception as e:
-            conn.close()
-            return jsonify({"valid": False, "message": f"绑定失败: {str(e)}"}), 500
+    conn.close()
+    return jsonify({
+        "valid": True,
+        "message": "验证通过",
+        "project_name": license_row["project_name"]
+    })
 
 
 # --- Admin Management API ---

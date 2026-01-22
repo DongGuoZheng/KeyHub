@@ -36,31 +36,74 @@ def init_db():
         )
     ''')
 
-    # Create Keys table
+    # Create Licenses table (replaces keys table)
     c.execute('''
-        CREATE TABLE IF NOT EXISTS keys (
+        CREATE TABLE IF NOT EXISTS licenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            key TEXT UNIQUE NOT NULL,
-            created_at TEXT NOT NULL,
+            project_id INTEGER NOT NULL,
+            license_key TEXT NOT NULL,
             is_active INTEGER DEFAULT 1,
             remarks TEXT,
-            project_id INTEGER,
-            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+            UNIQUE(project_id, license_key)
         )
     ''')
 
-    # Create MachineBindings table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS machine_bindings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            key_value TEXT NOT NULL,
-            machine_id TEXT NOT NULL,
-            bound_at TEXT NOT NULL,
-            remarks TEXT,
-            FOREIGN KEY (key_value) REFERENCES keys (key) ON DELETE CASCADE,
-            UNIQUE(key_value, machine_id)
-        )
-    ''')
+    # Create indexes for licenses table
+    c.execute('CREATE INDEX IF NOT EXISTS idx_licenses_project_id ON licenses(project_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_licenses_license_key ON licenses(license_key)')
+    
+    # Migrate licenses table if it has old columns (subject_type, subject_value, expires_at, meta)
+    try:
+        # Check if licenses table exists and has old columns
+        c.execute("PRAGMA table_info(licenses)")
+        columns = [row[1] for row in c.fetchall()]
+        old_columns = ['subject_type', 'subject_value', 'expires_at', 'meta']
+        has_old_columns = any(col in columns for col in old_columns)
+        
+        if has_old_columns:
+            print("检测到旧表结构，开始迁移数据...")
+            # Create temporary table with new structure
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS licenses_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL,
+                    license_key TEXT NOT NULL,
+                    is_active INTEGER DEFAULT 1,
+                    remarks TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+                    UNIQUE(project_id, license_key)
+                )
+            ''')
+            
+            # Copy data from old table to new table
+            c.execute('''
+                INSERT INTO licenses_new (
+                    id, project_id, license_key, is_active, remarks, created_at
+                )
+                SELECT 
+                    id, project_id, license_key, is_active, remarks, created_at
+                FROM licenses
+            ''')
+            
+            # Drop old table and indexes
+            c.execute('DROP INDEX IF EXISTS idx_licenses_subject')
+            c.execute('DROP TABLE licenses')
+            
+            # Rename new table
+            c.execute('ALTER TABLE licenses_new RENAME TO licenses')
+            
+            # Recreate indexes
+            c.execute('CREATE INDEX IF NOT EXISTS idx_licenses_project_id ON licenses(project_id)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_licenses_license_key ON licenses(license_key)')
+            
+            conn.commit()
+            print("数据迁移完成：已删除 subject_type, subject_value, expires_at, meta 字段")
+    except Exception as e:
+        print(f"迁移表结构时出错: {e}")
+        conn.rollback()
     
     # Create AdminUsers table
     c.execute('''
@@ -71,6 +114,34 @@ def init_db():
             created_at TEXT NOT NULL
         )
     ''')
+    
+    # Migrate data from old keys table to licenses table (if keys table exists)
+    try:
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='keys'")
+        if c.fetchone():
+            # Check if licenses table is empty (migration not done yet)
+            c.execute("SELECT COUNT(*) FROM licenses")
+            if c.fetchone()[0] == 0:
+                # Migrate data from keys to licenses
+                c.execute('''
+                    INSERT INTO licenses (
+                        project_id, 
+                        license_key, 
+                        is_active, 
+                        remarks, 
+                        created_at
+                    )
+                    SELECT 
+                        project_id,
+                        key as license_key,
+                        is_active,
+                        remarks,
+                        created_at
+                    FROM keys
+                ''')
+                print("数据已从 keys 表迁移到 licenses 表")
+    except Exception as e:
+        print(f"迁移数据时出错（可能 keys 表不存在）: {e}")
     
     # Create default project if not exists
     try:

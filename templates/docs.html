@@ -41,12 +41,8 @@
                     <ul>
                         <li><a href="#overview">概述</a></li>
                         <li><a href="#verify-api">验证接口</a></li>
-                        <li><a href="#request-params">请求参数</a></li>
-                        <li><a href="#request-example">请求示例</a></li>
-                        <li><a href="#response-params">返回参数</a></li>
-                        <li><a href="#response-examples">响应示例</a></li>
-                        <li><a href="#admin-api">用户注册接口</a></li>
-                        <li><a href="#integration">集成建议</a></li>
+                        <li><a href="#register-api">注册接口</a></li>
+                        <li><a href="#integration">集成指南</a></li>
                     </ul>
                 </nav>
             </aside>
@@ -54,25 +50,32 @@
             <!-- Main Content -->
             <main class="docs-content">
                 <section id="overview">
-                    <h1>KeyHub 客户端 API 文档</h1>
-                    <p class="lead">本文档详细介绍了如何集成 KeyHub 授权验证接口。</p>
-                </section>
-
-                <section id="verify-api">
-                    <h2>验证接口 (Verify API)</h2>
-                    <p>用于验证客户端授权 Key 并绑定当前机器。</p>
-
+                    <h1>KeyHub API 文档</h1>
+                    <p class="lead">KeyHub 是一个简单易用的授权密钥管理系统，支持多项目管理、自定义密钥格式和客户端自助注册。</p>
+                    
                     <div class="info-box">
-                        <h3>接口信息</h3>
+                        <h3>基础信息</h3>
                         <ul>
-                            <li><strong>地址:</strong> <code>POST /api/verify</code></li>
+                            <li><strong>Base URL:</strong> <code>http://your-domain.com</code></li>
                             <li><strong>数据格式:</strong> <code>application/json</code></li>
+                            <li><strong>字符编码:</strong> <code>UTF-8</code></li>
                         </ul>
                     </div>
                 </section>
 
-                <section id="request-params">
-                    <h2>请求参数</h2>
+                <section id="verify-api">
+                    <h2>🔐 验证接口</h2>
+                    <p>验证授权密钥是否在指定项目下有效。此接口用于客户端验证授权状态。</p>
+
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method post">POST</span>
+                            <code class="endpoint-url">/api/verify</code>
+                        </div>
+                        <p class="endpoint-desc">验证密钥在指定项目下的有效性</p>
+                    </div>
+
+                    <h3>请求参数</h3>
                     <div class="table-wrapper">
                         <table class="params-table">
                             <thead>
@@ -88,21 +91,19 @@
                                     <td><code>key</code></td>
                                     <td>String</td>
                                     <td>是</td>
-                                    <td>授权密钥 (格式: <code>KH-XXXXXXXX-XXXXXXXX</code>)</td>
+                                    <td>授权密钥（可以是自动生成的 KH-XXXXXXXX-XXXXXXXX 格式或自定义密钥）</td>
                                 </tr>
                                 <tr>
-                                    <td><code>machine_id</code></td>
+                                    <td><code>project_name</code></td>
                                     <td>String</td>
                                     <td>是</td>
-                                    <td>机器硬件指纹/唯一标识符(客户端生成)</td>
+                                    <td>项目名称（必须与密钥所属的项目名称一致）</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                </section>
 
-                <section id="request-example">
-                    <h2>请求示例 (JSON)</h2>
+                    <h3>请求示例</h3>
                     <div class="code-block">
                         <div class="code-header">
                             <span>JSON</span>
@@ -110,20 +111,11 @@
                         </div>
                         <pre><code>{
     "key": "KH-A1B2C3D4-E5F6G7H8",
-    "machine_id": "CPU-8888-9999-UUID"
-}
-
-// 自定义密钥示例
-{
-    "key": "13800138000",
-    "machine_id": "CPU-8888-9999-UUID"
+    "project_name": "Default Project"
 }</code></pre>
                     </div>
-                </section>
 
-                <section id="response-params">
-                    <h2>返回参数说明</h2>
-                    <p>返回 JSON 格式数据：</p>
+                    <h3>响应参数</h3>
                     <div class="table-wrapper">
                         <table class="params-table">
                             <thead>
@@ -137,22 +129,25 @@
                                 <tr>
                                     <td><code>valid</code></td>
                                     <td>Boolean</td>
-                                    <td>验证是否通过 (<code>true</code> 表示授权有效，<code>false</code> 表示授权无效)</td>
+                                    <td>验证结果（<code>true</code> 表示有效，<code>false</code> 表示无效）</td>
                                 </tr>
                                 <tr>
                                     <td><code>message</code></td>
                                     <td>String</td>
-                                    <td>提示信息 (中文)</td>
+                                    <td>提示信息（中文）</td>
+                                </tr>
+                                <tr>
+                                    <td><code>project_name</code></td>
+                                    <td>String</td>
+                                    <td>项目名称（仅在验证成功时返回）</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                </section>
 
-                <section id="response-examples">
-                    <h2>响应示例</h2>
+                    <h3>响应示例</h3>
 
-                    <h3>1. 验证成功 (新绑定)</h3>
+                    <h4>✅ 验证成功</h4>
                     <div class="status-badge success">状态码: 200 OK</div>
                     <div class="code-block">
                         <div class="code-header">
@@ -161,24 +156,12 @@
                         </div>
                         <pre><code>{
     "valid": true,
-    "message": "验证通过 (新绑定已创建)"
+    "message": "验证通过",
+    "project_name": "Default Project"
 }</code></pre>
                     </div>
 
-                    <h3>2. 验证成功 (已绑定机器)</h3>
-                    <div class="status-badge success">状态码: 200 OK</div>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
-                        </div>
-                        <pre><code>{
-    "valid": true,
-    "message": "验证通过 (已绑定)"
-}</code></pre>
-                    </div>
-
-                    <h3>3. 验证失败 (密钥不存在)</h3>
+                    <h4>❌ 验证失败 - 密钥不存在</h4>
                     <div class="status-badge error">状态码: 404 Not Found</div>
                     <div class="code-block">
                         <div class="code-header">
@@ -187,11 +170,11 @@
                         </div>
                         <pre><code>{
     "valid": false,
-    "message": "未找到密钥"
+    "message": "未找到该密钥在此项目下的授权"
 }</code></pre>
                     </div>
 
-                    <h3>4. 验证失败 (密钥被禁用)</h3>
+                    <h4>❌ 验证失败 - 授权已禁用</h4>
                     <div class="status-badge error">状态码: 403 Forbidden</div>
                     <div class="code-block">
                         <div class="code-header">
@@ -200,22 +183,43 @@
                         </div>
                         <pre><code>{
     "valid": false,
-    "message": "密钥已禁用"
+    "message": "授权已禁用"
 }</code></pre>
+                    </div>
+
+                    <h4>❌ 验证失败 - 参数错误</h4>
+                    <div class="status-badge error">状态码: 400 Bad Request</div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>JSON</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "valid": false,
+    "message": "密钥不能为空"
+}</code></pre>
+                    </div>
+
+                    <div class="warning-box">
+                        <strong>⚠️ 重要提示</strong>
+                        <ul>
+                            <li>验证时必须同时提供 <code>key</code> 和 <code>project_name</code> 参数</li>
+                            <li>系统会验证密钥是否属于指定的项目，如果密钥存在但不属于该项目，将返回 404 错误</li>
+                            <li>只有密钥状态为"已激活"时才会验证通过</li>
+                        </ul>
                     </div>
                 </section>
 
-                <section id="admin-api">
-                    <h2>用户注册接口 (公开)</h2>
-                    <p>用于客户端用户自助注册，无需管理员权限。</p>
+                <section id="register-api">
+                    <h2>📝 注册接口</h2>
+                    <p>客户端用户自助注册接口，无需管理员权限。用于客户端首次注册授权密钥。</p>
 
-                    <div class="info-box">
-                        <h3>接口信息</h3>
-                        <ul>
-                            <li><strong>地址:</strong> <code>POST /api/register</code></li>
-                            <li><strong>认证:</strong> 无需认证（公开接口）</li>
-                            <li><strong>数据格式:</strong> <code>application/json</code></li>
-                        </ul>
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method post">POST</span>
+                            <code class="endpoint-url">/api/register</code>
+                        </div>
+                        <p class="endpoint-desc">客户端自助注册授权密钥（公开接口，无需认证）</p>
                     </div>
 
                     <h3>请求参数</h3>
@@ -234,19 +238,19 @@
                                     <td><code>key</code> 或 <code>custom_key</code></td>
                                     <td>String</td>
                                     <td>是</td>
-                                    <td>用户密钥（可以是手机号、用户ID、邮箱等）</td>
+                                    <td>授权密钥（支持任意格式，如手机号、邮箱、随机字符串等）</td>
                                 </tr>
                                 <tr>
                                     <td><code>project_name</code></td>
                                     <td>String</td>
                                     <td>是</td>
-                                    <td>项目名称（必须指定，使用项目名代替项目ID）</td>
+                                    <td>项目名称（必须与后台创建的项目名称完全一致）</td>
                                 </tr>
                                 <tr>
                                     <td><code>remarks</code></td>
                                     <td>String</td>
                                     <td>否</td>
-                                    <td>备注信息（如用户昵称）</td>
+                                    <td>备注信息（如"VIP用户"、"企业授权"等）</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -258,30 +262,32 @@
                             <span>JSON</span>
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
-                        <pre><code>// 使用手机号注册指定项目
+                        <pre><code>// 使用自动生成的密钥格式
 {
-    "key": "13800138000",
+    "key": "KH-A1B2C3D4-E5F6G7H8",
     "project_name": "Default Project",
-    "remarks": "张三"
+    "remarks": "企业授权"
 }
 
-// 使用用户ID注册并指定项目
+// 使用手机号作为密钥
 {
-    "custom_key": "user_12345",
+    "key": "13800138000",
     "project_name": "Mobile App",
     "remarks": "VIP用户"
 }
 
-// 使用邮箱注册
+// 使用邮箱作为密钥
 {
     "key": "user@example.com",
     "project_name": "Web Portal",
-    "remarks": "企业用户"
+    "remarks": "个人用户"
 }</code></pre>
                     </div>
 
                     <h3>响应示例</h3>
-                    <div class="status-badge success">状态码: 201 Created（注册成功）</div>
+
+                    <h4>✅ 注册成功</h4>
+                    <div class="status-badge success">状态码: 201 Created</div>
                     <div class="code-block">
                         <div class="code-header">
                             <span>JSON</span>
@@ -289,55 +295,80 @@
                         </div>
                         <pre><code>{
     "success": true,
-    "key": "13800138000",
+    "key": "KH-A1B2C3D4-E5F6G7H8",
     "message": "注册成功"
 }</code></pre>
                     </div>
 
-                    <div class="status-badge error">状态码: 409 Conflict（用户已存在）</div>
+                    <h4>❌ 注册失败 - 密钥已存在</h4>
+                    <div class="status-badge error">状态码: 409 Conflict</div>
                     <div class="code-block">
                         <div class="code-header">
                             <span>JSON</span>
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "message": "该用户已注册（密钥已存在）"
+    "success": false,
+    "message": "该密钥在此项目中已存在"
 }</code></pre>
                     </div>
 
-                    <div class="status-badge error">状态码: 400 Bad Request（参数错误）</div>
+                    <h4>❌ 注册失败 - 项目不存在</h4>
+                    <div class="status-badge error">状态码: 404 Not Found</div>
                     <div class="code-block">
                         <div class="code-header">
                             <span>JSON</span>
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "message": "密钥不能为空"
-}</code></pre>
-                    </div>
-
-                    <div class="status-badge error">状态码: 404 Not Found（项目不存在）</div>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
-                        </div>
-                        <pre><code>{
+    "success": false,
     "message": "指定的项目不存在"
 }</code></pre>
+                    </div>
+
+                    <div class="info-box">
+                        <h3>💡 使用说明</h3>
+                        <ul>
+                            <li>此接口为公开接口，无需任何认证即可调用</li>
+                            <li>同一项目下，密钥必须唯一（不能重复注册）</li>
+                            <li>密钥格式完全自定义，可以是手机号、邮箱、随机字符串等任意格式</li>
+                            <li>注册成功后，密钥状态默认为"已激活"</li>
+                        </ul>
                     </div>
                 </section>
 
                 <section id="integration">
-                    <h2>集成建议</h2>
-                    <div class="tips-box">
+                    <h2>🚀 集成指南</h2>
+
+                    <h3>验证流程</h3>
+                    <div class="steps-box">
                         <ol>
-                            <li><strong>机器码获取:</strong> 建议使用 CPU ID 或 主板序列号生成的哈希值作为 <code>machine_id</code>。</li>
-                            <li><strong>用户注册:</strong> 客户端可以使用 <code>/api/register</code>
-                                接口让用户自助注册，使用手机号、邮箱或用户ID作为密钥。验证逻辑在客户端自行实现。</li>
-                            <li><strong>频率控制:</strong> 验证请求不宜过于频繁，建议在程序启动时验证一次，之后每隔数小时在后台静默验证。</li>
-                            <li><strong>超时处理:</strong> 客户端应处理网络超时或服务器宕机的情况，建议在这种情况下设置一定的宽限期。</li>
+                            <li><strong>获取密钥和项目名</strong>：从用户输入或配置文件中获取授权密钥和项目名称</li>
+                            <li><strong>调用验证接口</strong>：向 <code>/api/verify</code> 发送 POST 请求，包含 <code>key</code> 和 <code>project_name</code></li>
+                            <li><strong>处理响应</strong>：根据返回的 <code>valid</code> 字段判断验证结果</li>
+                            <li><strong>错误处理</strong>：处理网络错误、超时等异常情况</li>
                         </ol>
+                    </div>
+
+                    <h3>最佳实践</h3>
+                    <div class="tips-box">
+                        <ul>
+                            <li><strong>验证时机</strong>：建议在应用启动时验证一次，之后根据业务需要定期验证（如每天、每周）</li>
+                            <li><strong>缓存结果</strong>：验证成功后可以缓存结果，避免频繁请求服务器</li>
+                            <li><strong>错误处理</strong>：实现合理的重试机制和降级策略，确保网络异常时不影响用户体验</li>
+                            <li><strong>安全性</strong>：不要在客户端代码中硬编码密钥，建议从配置文件或环境变量读取</li>
+                            <li><strong>项目名称</strong>：确保项目名称与后台创建的项目名称完全一致（区分大小写）</li>
+                        </ul>
+                    </div>
+
+                    <h3>密钥格式建议</h3>
+                    <div class="info-box">
+                        <ul>
+                            <li><strong>自动生成格式</strong>：<code>KH-XXXXXXXX-XXXXXXXX</code> - 适合软件授权</li>
+                            <li><strong>手机号</strong>：<code>13800138000</code> - 适合移动应用</li>
+                            <li><strong>邮箱</strong>：<code>user@example.com</code> - 适合Web应用</li>
+                            <li><strong>自定义字符串</strong>：任意格式 - 根据业务需求自定义</li>
+                        </ul>
                     </div>
                 </section>
             </main>

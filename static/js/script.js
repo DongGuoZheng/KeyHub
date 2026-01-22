@@ -2,6 +2,7 @@
 const projectSelect = document.getElementById('projectSelect');
 const addProjectBtn = document.getElementById('addProjectBtn');
 const editProjectBtn = document.getElementById('editProjectBtn');
+const copyProjectNameBtn = document.getElementById('copyProjectNameBtn');
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
 const projectDesc = document.getElementById('projectDesc');
 
@@ -90,6 +91,16 @@ function setupEventListeners() {
 
     editProjectBtn.addEventListener('click', () => {
         if (currentProject) openProjectModal(currentProject);
+    });
+
+    copyProjectNameBtn.addEventListener('click', async () => {
+        if (!currentProject) return showToast('请先选择一个项目');
+        try {
+            await navigator.clipboard.writeText(currentProject.name);
+            showToast('项目名称已复制');
+        } catch (e) {
+            showToast('复制失败，请检查浏览器权限');
+        }
     });
 
     deleteProjectBtn.addEventListener('click', deleteCurrentProject);
@@ -218,40 +229,39 @@ async function loadKeys() {
     if (!currentProject) return;
 
     try {
-        keysTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center">Loading...</td></tr>';
+        keysTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center">Loading...</td></tr>';
 
         const res = await apiRequest(`/api/keys?project_id=${currentProject.id}`);
-        const keys = await res.json();
+        const licenses = await res.json();
 
-        renderKeys(keys);
-        updateStats(keys);
+        renderKeys(licenses);
+        updateStats(licenses);
     } catch (e) {
         console.error(e);
-        showToast('加载密钥失败');
+        showToast('加载授权列表失败');
     }
 }
 
-function renderKeys(keys) {
+function renderKeys(licenses) {
     keysTableBody.innerHTML = '';
 
-    if (keys.length === 0) {
+    if (licenses.length === 0) {
         emptyState.style.display = 'block';
         return;
     }
     emptyState.style.display = 'none';
 
-    keys.forEach(key => {
+    licenses.forEach(license => {
         const tr = document.createElement('tr');
-        const createdDate = new Date(key.created_at).toLocaleString();
+        const createdDate = new Date(license.created_at).toLocaleString();
 
-        const statusClass = key.is_active ? 'status-active' : 'status-disabled';
-        const statusText = key.is_active ? '已激活' : '已禁用';
+        const statusClass = license.is_active ? 'status-active' : 'status-disabled';
+        const statusText = license.is_active ? '已激活' : '已禁用';
 
         tr.innerHTML = `
-            <td data-label="密钥"><span class="key-mono">${key.key}</span></td>
+            <td data-label="密钥"><span class="key-mono">${license.license_key}</span></td>
             <td data-label="状态"><span class="status-badge ${statusClass}">${statusText}</span></td>
-            <td data-label="备注">${key.remarks || '-'}</td>
-            <td data-label="绑定数">${key.binding_count}</td>
+            <td data-label="备注">${license.remarks || '-'}</td>
             <td data-label="创建时间">${createdDate}</td>
             <td class="actions-cell" data-label="操作">
                <!-- To be filled by JS for event binding safely -->
@@ -262,18 +272,15 @@ function renderKeys(keys) {
         const actionsTd = tr.querySelector('.actions-cell');
 
         const copyBtn = createBtn('复制', () => {
-            navigator.clipboard.writeText(key.key);
+            navigator.clipboard.writeText(license.license_key);
             showToast('密钥已复制到剪贴板');
         });
 
-        const bindBtn = createBtn('绑定', () => openBindingsModal(key));
+        const toggleBtn = createBtn(license.is_active ? '禁用' : '启用', () => toggleKey(license));
 
-        const toggleBtn = createBtn(key.is_active ? '禁用' : '启用', () => toggleKey(key));
-
-        const delBtn = createBtn('删除', () => deleteKey(key), true);
+        const delBtn = createBtn('删除', () => deleteKey(license), true);
 
         actionsTd.appendChild(copyBtn);
-        actionsTd.appendChild(bindBtn);
         actionsTd.appendChild(toggleBtn);
         actionsTd.appendChild(delBtn);
 
@@ -292,11 +299,11 @@ function createBtn(text, onClick, isDanger = false) {
     return btn;
 }
 
-function updateStats(keys) {
-    statsTotal.textContent = keys.length;
-    statsActive.textContent = keys.filter(k => k.is_active).length;
-    // For bound keys, we count keys that have > 0 bindings
-    statsBound.textContent = keys.filter(k => k.binding_count > 0).length;
+function updateStats(licenses) {
+    statsTotal.textContent = licenses.length;
+    statsActive.textContent = licenses.filter(l => l.is_active).length;
+    // Show disabled count instead
+    statsBound.textContent = licenses.filter(l => !l.is_active).length;
 }
 
 async function handleKeySubmit(e) {
@@ -317,105 +324,49 @@ async function handleKeySubmit(e) {
         });
 
         const data = await res.json();
-        if (data.error) throw new Error(data.error);
+        if (data.message && !data.success) throw new Error(data.message);
 
         closeModal(keyModal);
-        showToast('密钥生成成功');
+        showToast(data.message || '授权创建成功');
         loadKeys();
         document.getElementById('keyRemarks').value = ''; // Reset
         document.getElementById('customKeyInput').value = ''; // Reset
     } catch (e) {
-        showToast(e.message);
+        showToast(e.message || '创建失败');
     }
 }
 
-async function deleteKey(key) {
-    if (!confirm('确定要删除此密钥吗？')) return;
+async function deleteKey(license) {
+    if (!confirm('确定要删除此授权吗？')) return;
 
     try {
-        const res = await apiRequest(`/api/keys/${key.key}`, { method: 'DELETE' });
+        const res = await apiRequest(`/api/keys/${license.license_key}?project_id=${currentProject.id}`, { 
+            method: 'DELETE' 
+        });
         const data = await res.json();
         if (data.success) {
-            showToast('密钥已删除');
+            showToast(data.message || '授权已删除');
             loadKeys();
         }
     } catch (e) {
-        showToast('删除密钥失败');
+        showToast(e.message || '删除授权失败');
     }
 }
 
-async function toggleKey(key) {
+async function toggleKey(license) {
     try {
-        const res = await apiRequest(`/api/keys/${key.key}/status`, {
+        const res = await apiRequest(`/api/keys/${license.license_key}/status?project_id=${currentProject.id}`, {
             method: 'PUT',
-            body: JSON.stringify({ is_active: !key.is_active })
+            body: JSON.stringify({ is_active: !license.is_active })
         });
 
         const data = await res.json();
         if (data.success) {
-            showToast(`密钥已${!key.is_active ? '启用' : '禁用'}`);
+            showToast(data.message || `授权已${!license.is_active ? '启用' : '禁用'}`);
             loadKeys();
         }
     } catch (e) {
-        showToast('更新状态失败');
-    }
-}
-
-// --- Bindings Logic ---
-
-async function openBindingsModal(key) {
-    document.getElementById('bindingKeyTitle').textContent = `所属密钥: ${key.key}`;
-    const list = document.getElementById('bindingsList');
-    list.innerHTML = '加载中...';
-
-    openModal(bindingsModal);
-
-    try {
-        const res = await apiRequest(`/api/keys/${key.key}/bindings`);
-        const bindings = await res.json();
-
-        list.innerHTML = '';
-        if (bindings.length === 0) {
-            list.innerHTML = '<div style="color:var(--text-secondary); text-align:center; padding:1rem">暂无机器绑定。</div>';
-            return;
-        }
-
-        bindings.forEach(b => {
-            const div = document.createElement('div');
-            div.className = 'binding-item';
-            div.innerHTML = `
-                <div class="binding-info">
-                    <div class="binding-machine-id">${b.machine_id} <span class="binding-remarks">${b.remarks || ''}</span></div>
-                    <div class="binding-date">绑定时间: ${new Date(b.bound_at).toLocaleString()}</div>
-                </div>
-                <button class="action-btn delete" onclick="unbindMachine(${b.id}, '${key.key}')">解绑</button>
-             `;
-            list.appendChild(div);
-        });
-
-    } catch (e) {
-        list.innerHTML = '加载绑定列表失败';
-    }
-}
-
-// Make unbind accessible globally for onclick HTML attribute
-window.unbindMachine = async function (id, keyVal) {
-    if (!confirm('确定解绑此机器吗？')) return;
-
-    try {
-        const res = await apiRequest(`/api/bindings/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-            showToast('机器已解绑');
-            // Refresh modal content. Since we don't pass full key obj easily,
-            // we can just re-fetch using keyVal or close/refresh parent.
-            // Let's refetch by calling openBindingsModal-like logic or just closing.
-            // Better user experience: remove element or reload list.
-            // Im implementing simple reload:
-            openBindingsModal({ key: keyVal }); // Hacky but works since we only need key.key
-            loadKeys(); // Refresh main table count
-        }
-    } catch (e) {
-        showToast('解绑失败');
+        showToast(e.message || '更新状态失败');
     }
 }
 
