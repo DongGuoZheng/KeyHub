@@ -45,6 +45,7 @@ def init_db():
             is_active INTEGER DEFAULT 1,
             remarks TEXT,
             created_at TEXT NOT NULL,
+            last_registered_at TEXT,
             FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
             UNIQUE(project_id, license_key)
         )
@@ -103,6 +104,18 @@ def init_db():
             print("数据迁移完成：已删除 subject_type, subject_value, expires_at, meta 字段")
     except Exception as e:
         print(f"迁移表结构时出错: {e}")
+        conn.rollback()
+
+    # Add last_registered_at column if it doesn't exist (forward migration)
+    try:
+        c.execute("PRAGMA table_info(licenses)")
+        columns = [row[1] for row in c.fetchall()]
+        if 'last_registered_at' not in columns:
+            c.execute('ALTER TABLE licenses ADD COLUMN last_registered_at TEXT')
+            conn.commit()
+            print("已添加 last_registered_at 字段")
+    except Exception as e:
+        print(f"添加 last_registered_at 字段时出错: {e}")
         conn.rollback()
     
     # Create AdminUsers table

@@ -229,7 +229,7 @@ async function loadKeys() {
     if (!currentProject) return;
 
     try {
-        keysTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center">Loading...</td></tr>';
+        keysTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center">Loading...</td></tr>';
 
         const res = await apiRequest(`/api/keys?project_id=${currentProject.id}`);
         const licenses = await res.json();
@@ -254,6 +254,9 @@ function renderKeys(licenses) {
     licenses.forEach(license => {
         const tr = document.createElement('tr');
         const createdDate = new Date(license.created_at).toLocaleString();
+        const lastRegDate = license.last_registered_at
+            ? new Date(license.last_registered_at).toLocaleString()
+            : '-';
 
         const statusClass = license.is_active ? 'status-active' : 'status-disabled';
         const statusText = license.is_active ? '已激活' : '已禁用';
@@ -263,6 +266,7 @@ function renderKeys(licenses) {
             <td data-label="状态"><span class="status-badge ${statusClass}">${statusText}</span></td>
             <td data-label="备注">${license.remarks || '-'}</td>
             <td data-label="创建时间">${createdDate}</td>
+            <td data-label="最后注册时间">${lastRegDate}</td>
             <td class="actions-cell" data-label="操作">
                <!-- To be filled by JS for event binding safely -->
             </td>

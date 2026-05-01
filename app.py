@@ -79,6 +79,9 @@ def admin_page():
 
 @app.route("/docs")
 def docs_page():
+    from flask import redirect
+    # Check for admin token via query param or just rely on client-side check
+    # We serve the page but client JS will redirect if no token
     return render_template("docs.html")
 
 
@@ -306,25 +309,39 @@ def register_user():
     project_id = project["id"]
 
     # Create license with custom key
+    now = datetime.datetime.now().isoformat()
     try:
         conn.execute(
             """INSERT INTO licenses (
-                project_id, license_key, 
-                is_active, remarks, created_at
-            ) VALUES (?, ?, 1, ?, ?)""",
+                project_id, license_key,
+                is_active, remarks, created_at, last_registered_at
+            ) VALUES (?, ?, 1, ?, ?, ?)""",
             (
                 project_id,
                 custom_key,
                 remarks,
-                datetime.datetime.now().isoformat(),
+                now,
+                now,
             ),
         )
         conn.commit()
         conn.close()
         return jsonify({"success": True, "key": custom_key, "message": "注册成功"}), 201
     except sqlite3.IntegrityError:
-        conn.close()
-        return jsonify({"success": False, "message": "该密钥在此项目中已存在"}), 409
+        # Key already exists - update last_registered_at timestamp
+        try:
+            now2 = datetime.datetime.now().isoformat()
+            conn.execute(
+                """UPDATE licenses SET last_registered_at = ?
+                   WHERE license_key = ? AND project_id = ?""",
+                (now2, custom_key, project_id),
+            )
+            conn.commit()
+            conn.close()
+            return jsonify({"success": True, "key": custom_key, "message": "重新注册成功"}), 200
+        except Exception as upd_exc:
+            conn.close()
+            return jsonify({"success": False, "message": f"更新注册时间失败: {str(upd_exc)}"}), 500
     except Exception as exc:
         conn.close()
         return jsonify({"success": False, "message": f"注册失败: {str(exc)}"}), 500
