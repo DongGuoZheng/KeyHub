@@ -218,7 +218,7 @@ button {
     background: var(--card-bg);
     border-radius: 12px;
     border: 1px solid var(--border-color);
-    overflow: hidden;
+    overflow-x: auto;
     box-shadow: var(--shadow-md);
 }
 
@@ -360,7 +360,8 @@ tr:hover {
 }
 
 .form-group input,
-.form-group textarea {
+.form-group textarea,
+.form-group select {
     width: 100%;
     padding: 0.75rem;
     border-radius: 6px;
@@ -371,7 +372,8 @@ tr:hover {
 }
 
 .form-group input:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.form-group select:focus {
     border-color: var(--accent-color);
     outline: none;
 }
@@ -445,6 +447,17 @@ tr:hover {
     font-style: italic;
     color: var(--text-secondary);
     margin-left: 0.5rem;
+}
+
+.sessions-list {
+    max-height: 60vh;
+    overflow: auto;
+    margin-top: 1rem;
+}
+
+.sessions-table th,
+.sessions-table td {
+    white-space: nowrap;
 }
 
 /* Scrollbar */

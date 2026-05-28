@@ -1,3 +1,7 @@
-/__pycache__
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
 db/keyhub.db
 /db

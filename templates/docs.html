@@ -4,10 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API文档 - KeyHub</title>
+    <title>{{ project_types[doc_type] }}文档 - KeyHub</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="/static/css/docs.css">
-    <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
         rel="stylesheet">
@@ -15,362 +14,261 @@
 
 <body>
     <div class="docs-container">
-        <!-- Header -->
         <header class="docs-header">
             <div class="logo">
                 <h1>KeyHub</h1>
-                <span class="badge">API文档</span>
+                <span class="badge">{{ project_types[doc_type] }}文档</span>
             </div>
 
             <nav class="nav-menu">
                 <a href="/" class="nav-link">密钥管理</a>
                 <a href="/admin" class="nav-link">管理员管理</a>
-                <a href="/docs" class="nav-link active">API文档</a>
+                <a href="/docs/{{ doc_type }}" class="nav-link active">API文档</a>
             </nav>
 
             <div class="user-actions">
-                <button class="btn-text" id="logoutBtn" title="登出">🚹 登出</button>
+                <button class="btn-text" id="logoutBtn" title="登出">登出</button>
             </div>
         </header>
 
+        <div class="docs-tabs">
+            <a href="/docs/account" class="docs-tab {% if doc_type == 'account' %}active{% endif %}">账号管理</a>
+            <a href="/docs/activation" class="docs-tab {% if doc_type == 'activation' %}active{% endif %}">激活码授权</a>
+            <a href="/docs/playback" class="docs-tab {% if doc_type == 'playback' %}active{% endif %}">播控管理</a>
+        </div>
+
         <div class="docs-layout">
-            <!-- Sidebar -->
             <aside class="docs-sidebar">
                 <nav class="docs-nav">
                     <h3>目录</h3>
                     <ul>
                         <li><a href="#overview">概述</a></li>
-                        <li><a href="#verify-api">验证接口</a></li>
-                        <li><a href="#register-api">注册接口</a></li>
-                        <li><a href="#integration">集成指南</a></li>
+                        <li><a href="#client-api">客户端接口</a></li>
+                        <li><a href="#examples">请求示例</a></li>
+                        <li><a href="#notes">接入说明</a></li>
                     </ul>
                 </nav>
             </aside>
 
-            <!-- Main Content -->
             <main class="docs-content">
+                {% if doc_type == 'account' %}
                 <section id="overview">
-                    <h1>KeyHub API 文档</h1>
-                    <p class="lead">KeyHub 是一个简单易用的授权密钥管理系统，支持多项目管理、自定义密钥格式和客户端自助注册。</p>
-                    
+                    <h1>账号管理业务文档</h1>
+                    <p class="lead">适用于把 KeyHub 当作轻量账号授权服务的项目。客户端用账号、手机号、邮箱或自定义标识作为 key 注册，再用同一个 key 做有效性校验。</p>
                     <div class="info-box">
-                        <h3>基础信息</h3>
+                        <h3>项目要求</h3>
                         <ul>
-                            <li><strong>Base URL:</strong> <code>http://your-domain.com</code></li>
-                            <li><strong>数据格式:</strong> <code>application/json</code></li>
-                            <li><strong>字符编码:</strong> <code>UTF-8</code></li>
+                            <li>后台创建项目时，项目类型选择 <code>账号管理</code></li>
+                            <li>客户端需要保存 <code>project_name</code> 和用户标识</li>
+                            <li>后台仍可禁用、删除或备注账号授权</li>
                         </ul>
                     </div>
                 </section>
 
-                <section id="verify-api">
-                    <h2>🔐 验证接口</h2>
-                    <p>验证授权密钥是否在指定项目下有效。此接口用于客户端验证授权状态。</p>
-
-                    <div class="api-endpoint">
-                        <div class="endpoint-header">
-                            <span class="method post">POST</span>
-                            <code class="endpoint-url">/api/verify</code>
-                        </div>
-                        <p class="endpoint-desc">验证密钥在指定项目下的有效性</p>
-                    </div>
-
-                    <h3>请求参数</h3>
-                    <div class="table-wrapper">
-                        <table class="params-table">
-                            <thead>
-                                <tr>
-                                    <th>参数名</th>
-                                    <th>类型</th>
-                                    <th>必填</th>
-                                    <th>说明</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td><code>key</code></td>
-                                    <td>String</td>
-                                    <td>是</td>
-                                    <td>授权密钥（可以是自动生成的 KH-XXXXXXXX-XXXXXXXX 格式或自定义密钥）</td>
-                                </tr>
-                                <tr>
-                                    <td><code>project_name</code></td>
-                                    <td>String</td>
-                                    <td>是</td>
-                                    <td>项目名称（必须与密钥所属的项目名称一致）</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <h3>请求示例</h3>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
-                        </div>
-                        <pre><code>{
-    "key": "KH-A1B2C3D4-E5F6G7H8",
-    "project_name": "Default Project"
-}</code></pre>
-                    </div>
-
-                    <h3>响应参数</h3>
-                    <div class="table-wrapper">
-                        <table class="params-table">
-                            <thead>
-                                <tr>
-                                    <th>字段名</th>
-                                    <th>类型</th>
-                                    <th>说明</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td><code>valid</code></td>
-                                    <td>Boolean</td>
-                                    <td>验证结果（<code>true</code> 表示有效，<code>false</code> 表示无效）</td>
-                                </tr>
-                                <tr>
-                                    <td><code>message</code></td>
-                                    <td>String</td>
-                                    <td>提示信息（中文）</td>
-                                </tr>
-                                <tr>
-                                    <td><code>project_name</code></td>
-                                    <td>String</td>
-                                    <td>项目名称（仅在验证成功时返回）</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <h3>响应示例</h3>
-
-                    <h4>✅ 验证成功</h4>
-                    <div class="status-badge success">状态码: 200 OK</div>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
-                        </div>
-                        <pre><code>{
-    "valid": true,
-    "message": "验证通过",
-    "project_name": "Default Project"
-}</code></pre>
-                    </div>
-
-                    <h4>❌ 验证失败 - 密钥不存在</h4>
-                    <div class="status-badge error">状态码: 404 Not Found</div>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
-                        </div>
-                        <pre><code>{
-    "valid": false,
-    "message": "未找到该密钥在此项目下的授权"
-}</code></pre>
-                    </div>
-
-                    <h4>❌ 验证失败 - 授权已禁用</h4>
-                    <div class="status-badge error">状态码: 403 Forbidden</div>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
-                        </div>
-                        <pre><code>{
-    "valid": false,
-    "message": "授权已禁用"
-}</code></pre>
-                    </div>
-
-                    <h4>❌ 验证失败 - 参数错误</h4>
-                    <div class="status-badge error">状态码: 400 Bad Request</div>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
-                        </div>
-                        <pre><code>{
-    "valid": false,
-    "message": "密钥不能为空"
-}</code></pre>
-                    </div>
-
-                    <div class="warning-box">
-                        <strong>⚠️ 重要提示</strong>
-                        <ul>
-                            <li>验证时必须同时提供 <code>key</code> 和 <code>project_name</code> 参数</li>
-                            <li>系统会验证密钥是否属于指定的项目，如果密钥存在但不属于该项目，将返回 404 错误</li>
-                            <li>只有密钥状态为"已激活"时才会验证通过</li>
-                        </ul>
-                    </div>
-                </section>
-
-                <section id="register-api">
-                    <h2>📝 注册接口</h2>
-                    <p>客户端用户自助注册接口，无需管理员权限。用于客户端首次注册授权密钥。</p>
-
+                <section id="client-api">
+                    <h2>客户端接口</h2>
                     <div class="api-endpoint">
                         <div class="endpoint-header">
                             <span class="method post">POST</span>
                             <code class="endpoint-url">/api/register</code>
                         </div>
-                        <p class="endpoint-desc">客户端自助注册授权密钥（公开接口，无需认证）</p>
+                        <p class="endpoint-desc">注册或重新注册账号标识。</p>
                     </div>
-
-                    <h3>请求参数</h3>
-                    <div class="table-wrapper">
-                        <table class="params-table">
-                            <thead>
-                                <tr>
-                                    <th>参数名</th>
-                                    <th>类型</th>
-                                    <th>必填</th>
-                                    <th>说明</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td><code>key</code> 或 <code>custom_key</code></td>
-                                    <td>String</td>
-                                    <td>是</td>
-                                    <td>授权密钥（支持任意格式，如手机号、邮箱、随机字符串等）</td>
-                                </tr>
-                                <tr>
-                                    <td><code>project_name</code></td>
-                                    <td>String</td>
-                                    <td>是</td>
-                                    <td>项目名称（必须与后台创建的项目名称完全一致）</td>
-                                </tr>
-                                <tr>
-                                    <td><code>remarks</code></td>
-                                    <td>String</td>
-                                    <td>否</td>
-                                    <td>备注信息（如"VIP用户"、"企业授权"等）</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <h3>请求示例</h3>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method post">POST</span>
+                            <code class="endpoint-url">/api/verify</code>
                         </div>
-                        <pre><code>// 使用自动生成的密钥格式
-{
-    "key": "KH-A1B2C3D4-E5F6G7H8",
-    "project_name": "Default Project",
-    "remarks": "企业授权"
-}
-
-// 使用手机号作为密钥
-{
-    "key": "13800138000",
-    "project_name": "Mobile App",
-    "remarks": "VIP用户"
-}
-
-// 使用邮箱作为密钥
-{
-    "key": "user@example.com",
-    "project_name": "Web Portal",
-    "remarks": "个人用户"
-}</code></pre>
-                    </div>
-
-                    <h3>响应示例</h3>
-
-                    <h4>✅ 注册成功</h4>
-                    <div class="status-badge success">状态码: 201 Created</div>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
-                        </div>
-                        <pre><code>{
-    "success": true,
-    "key": "KH-A1B2C3D4-E5F6G7H8",
-    "message": "注册成功"
-}</code></pre>
-                    </div>
-
-                    <h4>❌ 注册失败 - 密钥已存在</h4>
-                    <div class="status-badge error">状态码: 409 Conflict</div>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
-                        </div>
-                        <pre><code>{
-    "success": false,
-    "message": "该密钥在此项目中已存在"
-}</code></pre>
-                    </div>
-
-                    <h4>❌ 注册失败 - 项目不存在</h4>
-                    <div class="status-badge error">状态码: 404 Not Found</div>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span>JSON</span>
-                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
-                        </div>
-                        <pre><code>{
-    "success": false,
-    "message": "指定的项目不存在"
-}</code></pre>
-                    </div>
-
-                    <div class="info-box">
-                        <h3>💡 使用说明</h3>
-                        <ul>
-                            <li>此接口为公开接口，无需任何认证即可调用</li>
-                            <li>同一项目下，密钥必须唯一（不能重复注册）</li>
-                            <li>密钥格式完全自定义，可以是手机号、邮箱、随机字符串等任意格式</li>
-                            <li>注册成功后，密钥状态默认为"已激活"</li>
-                        </ul>
+                        <p class="endpoint-desc">验证账号标识是否仍然有效。</p>
                     </div>
                 </section>
 
-                <section id="integration">
-                    <h2>🚀 集成指南</h2>
-
-                    <h3>验证流程</h3>
-                    <div class="steps-box">
-                        <ol>
-                            <li><strong>获取密钥和项目名</strong>：从用户输入或配置文件中获取授权密钥和项目名称</li>
-                            <li><strong>调用验证接口</strong>：向 <code>/api/verify</code> 发送 POST 请求，包含 <code>key</code> 和 <code>project_name</code></li>
-                            <li><strong>处理响应</strong>：根据返回的 <code>valid</code> 字段判断验证结果</li>
-                            <li><strong>错误处理</strong>：处理网络错误、超时等异常情况</li>
-                        </ol>
+                <section id="examples">
+                    <h2>请求示例</h2>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>注册账号</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "key": "user@example.com",
+    "project_name": "VR Account Project",
+    "remarks": "门店账号"
+}</code></pre>
                     </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>验证账号</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "key": "user@example.com",
+    "project_name": "VR Account Project"
+}</code></pre>
+                    </div>
+                </section>
 
-                    <h3>最佳实践</h3>
+                <section id="notes">
+                    <h2>接入说明</h2>
                     <div class="tips-box">
                         <ul>
-                            <li><strong>验证时机</strong>：建议在应用启动时验证一次，之后根据业务需要定期验证（如每天、每周）</li>
-                            <li><strong>缓存结果</strong>：验证成功后可以缓存结果，避免频繁请求服务器</li>
-                            <li><strong>错误处理</strong>：实现合理的重试机制和降级策略，确保网络异常时不影响用户体验</li>
-                            <li><strong>安全性</strong>：不要在客户端代码中硬编码密钥，建议从配置文件或环境变量读取</li>
-                            <li><strong>项目名称</strong>：确保项目名称与后台创建的项目名称完全一致（区分大小写）</li>
-                        </ul>
-                    </div>
-
-                    <h3>密钥格式建议</h3>
-                    <div class="info-box">
-                        <ul>
-                            <li><strong>自动生成格式</strong>：<code>KH-XXXXXXXX-XXXXXXXX</code> - 适合软件授权</li>
-                            <li><strong>手机号</strong>：<code>13800138000</code> - 适合移动应用</li>
-                            <li><strong>邮箱</strong>：<code>user@example.com</code> - 适合Web应用</li>
-                            <li><strong>自定义字符串</strong>：任意格式 - 根据业务需求自定义</li>
+                            <li>账号管理项目适合已有账号系统的简单授权开关，不负责密码登录。</li>
+                            <li>建议客户端只把稳定用户标识传给 KeyHub，不要传明文密码。</li>
+                            <li>后台禁用授权后，下一次 <code>/api/verify</code> 会返回无效。</li>
                         </ul>
                     </div>
                 </section>
+                {% elif doc_type == 'playback' %}
+                <section id="overview">
+                    <h1>播控管理业务文档</h1>
+                    <p class="lead">适用于 PC 播控端 + VR 客户端的播放授权。播控端生成机器码，后台直接把这串机器码作为授权标识，并为它设置剩余播放次数和到期日期。</p>
+                    <div class="info-box">
+                        <h3>项目要求</h3>
+                        <ul>
+                            <li>后台创建项目时，项目类型选择 <code>播控管理</code></li>
+                            <li>播控端启动后调用状态接口展示剩余次数和到期时间</li>
+                            <li>每次真正开始体验时调用开始播放接口，次数会在开始时扣减</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section id="client-api">
+                    <h2>客户端接口</h2>
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method post">POST</span>
+                            <code class="endpoint-url">/api/license/status</code>
+                        </div>
+                        <p class="endpoint-desc">用播控端机器码查询授权状态、剩余次数和到期时间。</p>
+                    </div>
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method post">POST</span>
+                            <code class="endpoint-url">/api/play/start</code>
+                        </div>
+                        <p class="endpoint-desc">开始一次播放，服务端校验通过后扣减一次播放次数并返回 session_id。</p>
+                    </div>
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method post">POST</span>
+                            <code class="endpoint-url">/api/play/heartbeat</code>
+                        </div>
+                        <p class="endpoint-desc">播放中可选心跳，用于后台判断客户端是否仍在运行。</p>
+                    </div>
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method post">POST</span>
+                            <code class="endpoint-url">/api/play/end</code>
+                        </div>
+                        <p class="endpoint-desc">正常结束一次播放，写入结束时间和播放时长。</p>
+                    </div>
+                </section>
+
+                <section id="examples">
+                    <h2>请求示例</h2>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>查询授权状态</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "project_name": "VR Playback Project",
+    "machine_code": "PC-ABCD-001"
+}</code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>开始播放</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "project_name": "VR Playback Project",
+    "machine_code": "PC-ABCD-001",
+    "client_version": "1.0.0"
+}</code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>结束播放</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "session_id": "返回的 session_id"
+}</code></pre>
+                    </div>
+                </section>
+
+                <section id="notes">
+                    <h2>接入说明</h2>
+                    <div class="warning-box">
+                        <ul>
+                            <li>次数在 <code>/api/play/start</code> 成功时扣减，避免崩溃或断电导致漏扣。</li>
+                            <li>后台会把长期没有结束记录的播放标记为超时，便于排查异常退出。</li>
+                            <li>机器码就是播控项目的授权标识，不需要再额外传 <code>key</code>。</li>
+                        </ul>
+                    </div>
+                </section>
+                {% else %}
+                <section id="overview">
+                    <h1>激活码授权业务文档</h1>
+                    <p class="lead">适用于软件、插件、工具或虚幻引擎插件的激活码校验。后台创建激活码，客户端只负责验证激活码是否仍然有效。</p>
+                    <div class="info-box">
+                        <h3>项目要求</h3>
+                        <ul>
+                            <li>后台创建项目时，项目类型选择 <code>激活码授权管理</code></li>
+                            <li>后台生成或录入激活码，客户端调用验证接口</li>
+                            <li>后台可随时禁用、启用或删除激活码</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section id="client-api">
+                    <h2>客户端接口</h2>
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method post">POST</span>
+                            <code class="endpoint-url">/api/verify</code>
+                        </div>
+                        <p class="endpoint-desc">验证激活码是否属于指定项目且处于启用状态。</p>
+                    </div>
+                </section>
+
+                <section id="examples">
+                    <h2>请求示例</h2>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>验证激活码</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "key": "KH-A1B2C3D4-E5F6G7H8",
+    "project_name": "Unreal Plugin Project"
+}</code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>验证成功响应</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "valid": true,
+    "message": "验证通过",
+    "project_name": "Unreal Plugin Project"
+}</code></pre>
+                    </div>
+                </section>
+
+                <section id="notes">
+                    <h2>接入说明</h2>
+                    <div class="tips-box">
+                        <ul>
+                            <li>激活码项目不管理播放次数和到期时间，适合简单启用/禁用授权。</li>
+                            <li>项目名称必须与后台项目名称完全一致。</li>
+                            <li>如需要次数和到期时间，请使用 <code>播控管理</code> 项目类型。</li>
+                        </ul>
+                    </div>
+                </section>
+                {% endif %}
             </main>
         </div>
     </div>
@@ -394,7 +292,6 @@
             });
         }
 
-        // Smooth scroll for anchor links
         document.querySelectorAll('.docs-nav a').forEach(anchor => {
             anchor.addEventListener('click', function (e) {
                 e.preventDefault();
@@ -405,12 +302,10 @@
             });
         });
 
-        // Auth check
         if (!localStorage.getItem('adminToken')) {
             window.location.href = '/login';
         }
 
-        // Logout
         document.getElementById('logoutBtn').addEventListener('click', () => {
             localStorage.removeItem('adminToken');
             window.location.href = '/login';
