@@ -44,7 +44,7 @@
                     <ul>
                         <li><a href="#overview">概述</a></li>
                         <li><a href="#client-api">客户端接口</a></li>
-                        <li><a href="#examples">请求示例</a></li>
+                        <li><a href="#examples">请求/返回示例</a></li>
                         <li><a href="#notes">接入说明</a></li>
                     </ul>
                 </nav>
@@ -104,6 +104,52 @@
                         <pre><code>{
     "key": "user@example.com",
     "project_name": "VR Account Project"
+}</code></pre>
+                    </div>
+
+                    <h2>返回示例</h2>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>注册成功</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "success": true,
+    "key": "user@example.com",
+    "message": "注册成功"
+}</code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>验证成功</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "valid": true,
+    "message": "验证通过",
+    "id": 12,
+    "key": "user@example.com",
+    "project_id": 3,
+    "project_name": "VR Account Project",
+    "project_type": "account",
+    "is_active": true,
+    "auth_type": "unlimited",
+    "remaining_plays": null,
+    "valid_until": null,
+    "machine_code": null,
+    "last_play_started_at": null,
+    "playable": true,
+    "expired": false
+}</code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>验证失败</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "valid": false,
+    "message": "未找到该密钥在此项目下的授权"
 }</code></pre>
                     </div>
                 </section>
@@ -196,6 +242,87 @@
     "session_id": "返回的 session_id"
 }</code></pre>
                     </div>
+
+                    <h2>返回示例</h2>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>查询授权状态成功</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "valid": true,
+    "id": 8,
+    "key": "PC-ABCD-001",
+    "project_id": 5,
+    "project_name": "VR Playback Project",
+    "project_type": "playback",
+    "is_active": true,
+    "auth_type": "count_date",
+    "remaining_plays": 20,
+    "valid_until": "2026-12-31",
+    "machine_code": "PC-ABCD-001",
+    "last_play_started_at": null,
+    "playable": true,
+    "expired": false,
+    "message": "授权可用"
+}</code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>开始播放成功</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "success": true,
+    "message": "播放已开始",
+    "session_id": "8d2b7f8e1e6a4b74b2974f8f2a3c9d10",
+    "id": 8,
+    "key": "PC-ABCD-001",
+    "project_id": 5,
+    "project_name": "VR Playback Project",
+    "project_type": "playback",
+    "is_active": true,
+    "auth_type": "count_date",
+    "remaining_plays": 19,
+    "valid_until": "2026-12-31",
+    "machine_code": "PC-ABCD-001",
+    "last_play_started_at": "2026-05-28T16:30:00",
+    "playable": true,
+    "expired": false
+}</code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>心跳成功</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "success": true,
+    "message": "心跳已记录"
+}</code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>结束播放成功</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "success": true,
+    "message": "播放已结束",
+    "session_id": "8d2b7f8e1e6a4b74b2974f8f2a3c9d10",
+    "duration_seconds": 360
+}</code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>播放失败</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "success": false,
+    "message": "剩余播放次数不足"
+}</code></pre>
+                    </div>
                 </section>
 
                 <section id="notes">
@@ -253,7 +380,29 @@
                         <pre><code>{
     "valid": true,
     "message": "验证通过",
-    "project_name": "Unreal Plugin Project"
+    "id": 6,
+    "key": "KH-A1B2C3D4-E5F6G7H8",
+    "project_id": 4,
+    "project_name": "Unreal Plugin Project",
+    "project_type": "activation",
+    "is_active": true,
+    "auth_type": "unlimited",
+    "remaining_plays": null,
+    "valid_until": null,
+    "machine_code": null,
+    "last_play_started_at": null,
+    "playable": true,
+    "expired": false
+}</code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span>验证失败响应</span>
+                            <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        </div>
+                        <pre><code>{
+    "valid": false,
+    "message": "授权已禁用"
 }</code></pre>
                     </div>
                 </section>
