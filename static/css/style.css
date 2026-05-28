@@ -250,10 +250,12 @@ tr:hover {
 }
 
 .status-badge {
+    display: inline-block;
     padding: 0.25rem 0.6rem;
     border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .status-active {
@@ -333,6 +335,15 @@ tr:hover {
 
 .modal-content.large {
     max-width: 700px;
+}
+
+.sessions-modal-content {
+    width: 96vw;
+    max-width: 1280px;
+}
+
+.sessions-modal-content h2 {
+    padding-right: 2rem;
 }
 
 .close {
@@ -451,13 +462,43 @@ tr:hover {
 
 .sessions-list {
     max-height: 60vh;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     margin-top: 1rem;
+}
+
+.sessions-table {
+    table-layout: fixed;
 }
 
 .sessions-table th,
 .sessions-table td {
     white-space: nowrap;
+}
+
+.sessions-table th:nth-child(1),
+.sessions-table td:nth-child(1) {
+    width: 90px;
+}
+
+.sessions-table th:nth-child(2),
+.sessions-table td:nth-child(2),
+.sessions-table th:nth-child(3),
+.sessions-table td:nth-child(3) {
+    width: 190px;
+}
+
+.sessions-table th:nth-child(4),
+.sessions-table td:nth-child(4) {
+    width: 80px;
+}
+
+.sessions-table th:nth-child(5),
+.sessions-table td:nth-child(5),
+.sessions-table th:nth-child(6),
+.sessions-table td:nth-child(6) {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Scrollbar */

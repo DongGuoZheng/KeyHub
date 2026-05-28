@@ -91,9 +91,9 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "key": "user@example.com",
-    "project_name": "VR Account Project",
-    "remarks": "门店账号"
+    "key": "user@example.com",        // 必填：账号标识，可以是邮箱、手机号、用户ID
+    "project_name": "VR Account Project", // 必填：后台项目名称，必须完全一致
+    "remarks": "门店账号"             // 可选：后台备注，方便管理员识别
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -102,8 +102,8 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "key": "user@example.com",
-    "project_name": "VR Account Project"
+    "key": "user@example.com",        // 必填：要验证的账号标识
+    "project_name": "VR Account Project" // 必填：账号管理项目名称
 }</code></pre>
                     </div>
 
@@ -114,9 +114,9 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "success": true,
-    "key": "user@example.com",
-    "message": "注册成功"
+    "success": true,                  // 是否注册成功
+    "key": "user@example.com",        // 已注册的账号标识
+    "message": "注册成功"             // 服务端提示信息
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -125,21 +125,21 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "valid": true,
-    "message": "验证通过",
-    "id": 12,
-    "key": "user@example.com",
-    "project_id": 3,
-    "project_name": "VR Account Project",
-    "project_type": "account",
-    "is_active": true,
-    "auth_type": "unlimited",
-    "remaining_plays": null,
-    "valid_until": null,
-    "machine_code": null,
-    "last_play_started_at": null,
-    "playable": true,
-    "expired": false
+    "valid": true,                    // 客户端主要判断字段：true 表示账号可用
+    "message": "验证通过",            // 验证结果说明
+    "id": 12,                         // 授权记录ID
+    "key": "user@example.com",        // 当前账号标识
+    "project_id": 3,                  // 项目ID
+    "project_name": "VR Account Project", // 项目名称
+    "project_type": "account",       // 项目类型：账号管理
+    "is_active": true,                // 后台是否启用
+    "auth_type": "unlimited",        // 账号管理默认不限次数/日期
+    "remaining_plays": null,          // 播控项目才使用，账号项目为 null
+    "valid_until": null,              // 播控项目才使用，账号项目为 null
+    "machine_code": null,             // 播控项目才使用，账号项目为 null
+    "last_play_started_at": null,     // 播控项目最后播放时间
+    "playable": true,                 // 综合授权状态
+    "expired": false                  // 是否过期
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -148,8 +148,8 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "valid": false,
-    "message": "未找到该密钥在此项目下的授权"
+    "valid": false,                   // false 表示不可用
+    "message": "未找到该密钥在此项目下的授权" // 失败原因，可直接展示或记录
 }</code></pre>
                     </div>
                 </section>
@@ -218,8 +218,8 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "project_name": "VR Playback Project",
-    "machine_code": "PC-ABCD-001"
+    "project_name": "VR Playback Project", // 必填：播控管理项目名称
+    "machine_code": "PC-ABCD-001"          // 必填：播控端生成的机器码，也是授权标识
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -228,9 +228,9 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "project_name": "VR Playback Project",
-    "machine_code": "PC-ABCD-001",
-    "client_version": "1.0.0"
+    "project_name": "VR Playback Project", // 必填：播控管理项目名称
+    "machine_code": "PC-ABCD-001",         // 必填：播控端生成的机器码
+    "client_version": "1.0.0"              // 可选：客户端版本，便于日志排查
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -239,7 +239,7 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "session_id": "返回的 session_id"
+    "session_id": "返回的 session_id" // 必填：/api/play/start 返回的播放会话ID
 }</code></pre>
                     </div>
 
@@ -250,21 +250,21 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "valid": true,
-    "id": 8,
-    "key": "PC-ABCD-001",
-    "project_id": 5,
-    "project_name": "VR Playback Project",
-    "project_type": "playback",
-    "is_active": true,
-    "auth_type": "count_date",
-    "remaining_plays": 20,
-    "valid_until": "2026-12-31",
-    "machine_code": "PC-ABCD-001",
-    "last_play_started_at": null,
-    "playable": true,
-    "expired": false,
-    "message": "授权可用"
+    "valid": true,                    // 客户端主要判断字段：true 表示当前可播放
+    "id": 8,                          // 授权记录ID
+    "key": "PC-ABCD-001",            // 授权标识，播控项目中等同机器码
+    "project_id": 5,                  // 项目ID
+    "project_name": "VR Playback Project", // 项目名称
+    "project_type": "playback",      // 项目类型：播控管理
+    "is_active": true,                // 后台是否启用
+    "auth_type": "count_date",       // 授权方式：count/date/count_date/unlimited
+    "remaining_plays": 20,            // 剩余可播放次数，按次数类授权要重点显示
+    "valid_until": "2026-12-31",     // 到期日期，按日期类授权要重点显示
+    "machine_code": "PC-ABCD-001",   // 播控端机器码
+    "last_play_started_at": null,     // 最近一次开始播放时间
+    "playable": true,                 // 综合次数、日期、启用状态后的可播放结果
+    "expired": false,                 // 是否已过期
+    "message": "授权可用"             // 状态说明
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -273,22 +273,22 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "success": true,
-    "message": "播放已开始",
-    "session_id": "8d2b7f8e1e6a4b74b2974f8f2a3c9d10",
-    "id": 8,
-    "key": "PC-ABCD-001",
-    "project_id": 5,
-    "project_name": "VR Playback Project",
-    "project_type": "playback",
-    "is_active": true,
-    "auth_type": "count_date",
-    "remaining_plays": 19,
-    "valid_until": "2026-12-31",
-    "machine_code": "PC-ABCD-001",
-    "last_play_started_at": "2026-05-28T16:30:00",
-    "playable": true,
-    "expired": false
+    "success": true,                  // 是否成功开始播放
+    "message": "播放已开始",          // 服务端提示信息
+    "session_id": "8d2b7f8e1e6a4b74b2974f8f2a3c9d10", // 本次播放会话ID，结束/心跳必须携带
+    "id": 8,                          // 授权记录ID
+    "key": "PC-ABCD-001",            // 授权标识，播控项目中等同机器码
+    "project_id": 5,                  // 项目ID
+    "project_name": "VR Playback Project", // 项目名称
+    "project_type": "playback",      // 项目类型：播控管理
+    "is_active": true,                // 后台是否启用
+    "auth_type": "count_date",       // 授权方式
+    "remaining_plays": 19,            // 开始播放后已扣减 1 次
+    "valid_until": "2026-12-31",     // 到期日期
+    "machine_code": "PC-ABCD-001",   // 播控端机器码
+    "last_play_started_at": "2026-05-28T16:30:00", // 本次开始播放时间
+    "playable": true,                 // 扣减后是否仍可继续播放
+    "expired": false                  // 是否已过期
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -297,8 +297,8 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "success": true,
-    "message": "心跳已记录"
+    "success": true,                  // 心跳是否记录成功
+    "message": "心跳已记录"           // 服务端提示信息
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -307,10 +307,10 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "success": true,
-    "message": "播放已结束",
-    "session_id": "8d2b7f8e1e6a4b74b2974f8f2a3c9d10",
-    "duration_seconds": 360
+    "success": true,                  // 是否成功结束播放
+    "message": "播放已结束",          // 服务端提示信息
+    "session_id": "8d2b7f8e1e6a4b74b2974f8f2a3c9d10", // 已结束的播放会话ID
+    "duration_seconds": 360           // 本次播放时长，单位：秒
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -319,8 +319,8 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "success": false,
-    "message": "剩余播放次数不足"
+    "success": false,                 // false 表示播放开始失败
+    "message": "剩余播放次数不足"      // 失败原因，可展示给播控端用户
 }</code></pre>
                     </div>
                 </section>
@@ -368,8 +368,8 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "key": "KH-A1B2C3D4-E5F6G7H8",
-    "project_name": "Unreal Plugin Project"
+    "key": "KH-A1B2C3D4-E5F6G7H8",     // 必填：后台生成或录入的激活码
+    "project_name": "Unreal Plugin Project" // 必填：激活码授权项目名称
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -378,21 +378,21 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "valid": true,
-    "message": "验证通过",
-    "id": 6,
-    "key": "KH-A1B2C3D4-E5F6G7H8",
-    "project_id": 4,
-    "project_name": "Unreal Plugin Project",
-    "project_type": "activation",
-    "is_active": true,
-    "auth_type": "unlimited",
-    "remaining_plays": null,
-    "valid_until": null,
-    "machine_code": null,
-    "last_play_started_at": null,
-    "playable": true,
-    "expired": false
+    "valid": true,                    // 客户端主要判断字段：true 表示激活码有效
+    "message": "验证通过",            // 验证结果说明
+    "id": 6,                          // 授权记录ID
+    "key": "KH-A1B2C3D4-E5F6G7H8",    // 当前激活码
+    "project_id": 4,                  // 项目ID
+    "project_name": "Unreal Plugin Project", // 项目名称
+    "project_type": "activation",    // 项目类型：激活码授权管理
+    "is_active": true,                // 后台是否启用
+    "auth_type": "unlimited",        // 激活码默认不限次数/日期
+    "remaining_plays": null,          // 播控项目才使用
+    "valid_until": null,              // 播控项目才使用
+    "machine_code": null,             // 播控项目才使用
+    "last_play_started_at": null,     // 播控项目才使用
+    "playable": true,                 // 综合授权状态
+    "expired": false                  // 是否过期
 }</code></pre>
                     </div>
                     <div class="code-block">
@@ -401,8 +401,8 @@
                             <button class="copy-btn" onclick="copyCode(this)">复制</button>
                         </div>
                         <pre><code>{
-    "valid": false,
-    "message": "授权已禁用"
+    "valid": false,                   // false 表示激活码不可用
+    "message": "授权已禁用"           // 失败原因，可展示或记录
 }</code></pre>
                     </div>
                 </section>
