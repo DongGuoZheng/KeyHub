@@ -24,6 +24,7 @@ const keySubmitBtn = document.getElementById('keySubmitBtn');
 const projectModal = document.getElementById('projectModal');
 const keyModal = document.getElementById('keyModal');
 const entitlementModal = document.getElementById('entitlementModal');
+const remarksModal = document.getElementById('remarksModal');
 const sessionsModal = document.getElementById('sessionsModal');
 const closeButtons = document.querySelectorAll('.close, .close-btn');
 
@@ -31,6 +32,7 @@ const closeButtons = document.querySelectorAll('.close, .close-btn');
 const projectForm = document.getElementById('projectForm');
 const keyForm = document.getElementById('keyForm');
 const entitlementForm = document.getElementById('entitlementForm');
+const remarksForm = document.getElementById('remarksForm');
 const authTypeInput = document.getElementById('authTypeInput');
 const remainingPlaysGroup = document.getElementById('remainingPlaysGroup');
 const addPlaysGroup = document.getElementById('addPlaysGroup');
@@ -133,6 +135,7 @@ function setupEventListeners() {
     projectForm.addEventListener('submit', handleProjectSubmit);
     keyForm.addEventListener('submit', handleKeySubmit);
     entitlementForm.addEventListener('submit', handleEntitlementSubmit);
+    remarksForm.addEventListener('submit', handleRemarksSubmit);
     authTypeInput.addEventListener('change', updateEntitlementFieldsVisibility);
 
     // Modals
@@ -314,8 +317,10 @@ function renderKeys(licenses) {
         actionsTd.appendChild(copyBtn);
         actionsTd.appendChild(toggleBtn);
         if (isPlaybackProject) {
+            const remarksBtn = createBtn('备注', () => openRemarksModal(license));
             const entitlementBtn = createBtn('权益', () => openEntitlementModal(license));
             const sessionsBtn = createBtn('日志', () => openSessionsModal(license));
+            actionsTd.appendChild(remarksBtn);
             actionsTd.appendChild(entitlementBtn);
             actionsTd.appendChild(sessionsBtn);
         }
@@ -437,6 +442,38 @@ async function toggleKey(license) {
         }
     } catch (e) {
         showToast(e.message || '更新状态失败');
+    }
+}
+
+// --- Remarks Logic ---
+
+function openRemarksModal(license) {
+    document.getElementById('remarksKeyValue').value = license.license_key;
+    document.getElementById('remarksKeyDisplay').value = license.license_key;
+    document.getElementById('remarksInput').value = license.remarks || '';
+    openModal(remarksModal);
+}
+
+async function handleRemarksSubmit(e) {
+    e.preventDefault();
+
+    const keyValue = document.getElementById('remarksKeyValue').value;
+    const remarks = document.getElementById('remarksInput').value;
+
+    try {
+        const encodedKey = encodeURIComponent(keyValue);
+        const res = await apiRequest(`/api/keys/${encodedKey}/remarks?project_id=${currentProject.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ remarks })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '备注更新失败');
+
+        closeModal(remarksModal);
+        showToast('备注已更新');
+        loadKeys();
+    } catch (e) {
+        showToast(e.message || '备注更新失败');
     }
 }
 

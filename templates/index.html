@@ -196,6 +196,29 @@
         </div>
     </div>
 
+    <!-- Remarks Modal -->
+    <div id="remarksModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>修改备注</h2>
+            <form id="remarksForm">
+                <input type="hidden" id="remarksKeyValue">
+                <div class="form-group">
+                    <label>授权码</label>
+                    <input type="text" id="remarksKeyDisplay" disabled>
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="remarksInput" placeholder="例如：客户 A / 设备位置 / 门店名称">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary close-btn">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Play Sessions Modal -->
     <div id="sessionsModal" class="modal">
         <div class="modal-content sessions-modal-content">
