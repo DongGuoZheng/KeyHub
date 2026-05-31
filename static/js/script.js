@@ -273,6 +273,7 @@ async function loadKeys() {
 function renderKeys(licenses) {
     keysTableBody.innerHTML = '';
     const isPlaybackProject = currentProject?.project_type === 'playback';
+    const canEditRemarks = ['activation', 'playback'].includes(currentProject?.project_type);
 
     if (licenses.length === 0) {
         emptyState.style.display = 'block';
@@ -316,11 +317,13 @@ function renderKeys(licenses) {
 
         actionsTd.appendChild(copyBtn);
         actionsTd.appendChild(toggleBtn);
-        if (isPlaybackProject) {
+        if (canEditRemarks) {
             const remarksBtn = createBtn('备注', () => openRemarksModal(license));
+            actionsTd.appendChild(remarksBtn);
+        }
+        if (isPlaybackProject) {
             const entitlementBtn = createBtn('权益', () => openEntitlementModal(license));
             const sessionsBtn = createBtn('日志', () => openSessionsModal(license));
-            actionsTd.appendChild(remarksBtn);
             actionsTd.appendChild(entitlementBtn);
             actionsTd.appendChild(sessionsBtn);
         }
