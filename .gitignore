@@ -1,3 +1,14 @@
-/__pycache__
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
 db/keyhub.db
 /db
+
+# Unreal Engine plugin build output
+/ue_Plugins/
+ue_Plugins/**/Binaries/
+ue_Plugins/**/Intermediate/
+ue_Plugins/**/Saved/
+ue_Plugins/**/DerivedDataCache/

@@ -22,7 +22,7 @@
             <nav class="nav-menu">
                 <a href="/" class="nav-link active">密钥管理</a>
                 <a href="/admin" class="nav-link">管理员管理</a>
-                <a href="/docs" class="nav-link">API文档</a>
+                <a href="/docs" class="nav-link" id="docsNavLink">API文档</a>
             </nav>
 
             <div class="project-selector">
@@ -80,11 +80,13 @@
                 <table id="keysTable">
                     <thead>
                         <tr>
-                            <th>密钥 (Key)</th>
+                            <th id="keyHeader">密钥 (Key)</th>
                             <th>状态</th>
+                            <th class="playback-only">授权方式</th>
+                            <th class="playback-only">剩余次数</th>
+                            <th class="playback-only">到期时间</th>
                             <th>备注</th>
                             <th>创建时间</th>
-                            <th>最后注册时间</th>
                             <th>操作</th>
                         </tr>
                     </thead>
@@ -113,6 +115,14 @@
                     <input type="text" id="projectName" required>
                 </div>
                 <div class="form-group">
+                    <label>项目类型</label>
+                    <select id="projectType">
+                        <option value="account">账号管理</option>
+                        <option value="activation">激活码授权管理</option>
+                        <option value="playback">播控管理（日期/次数）</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>描述</label>
                     <textarea id="projectDescInput"></textarea>
                 </div>
@@ -128,10 +138,10 @@
     <div id="keyModal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
-            <h2>生成新密钥</h2>
+            <h2 id="keyModalTitle">生成新密钥</h2>
             <form id="keyForm">
                 <div class="form-group">
-                    <label>自定义密钥 (可选)</label>
+                    <label id="customKeyLabel">自定义密钥 (可选)</label>
                     <input type="text" id="customKeyInput" placeholder="留空则自动生成，支持中文、手机号等">
                 </div>
                 <div class="form-group">
@@ -140,9 +150,83 @@
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary close-btn">取消</button>
-                    <button type="submit" class="btn btn-primary">生成</button>
+                    <button type="submit" class="btn btn-primary" id="keySubmitBtn">生成</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Entitlement Modal -->
+    <div id="entitlementModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>设置授权权益</h2>
+            <form id="entitlementForm">
+                <input type="hidden" id="entitlementLicenseId">
+                <div class="form-group">
+                    <label>授权密钥</label>
+                    <input type="text" id="entitlementKeyDisplay" disabled>
+                </div>
+                <div class="form-group">
+                    <label>授权方式</label>
+                    <select id="authTypeInput">
+                        <option value="unlimited">不限次数 / 不限日期</option>
+                        <option value="count">按次数</option>
+                        <option value="date">按到期时间</option>
+                        <option value="count_date">次数 + 到期时间</option>
+                    </select>
+                </div>
+                <div class="form-group" id="remainingPlaysGroup">
+                    <label>当前剩余次数</label>
+                    <input type="number" id="remainingPlaysInput" min="0" placeholder="不限次数可留空">
+                </div>
+                <div class="form-group" id="addPlaysGroup">
+                    <label>本次充值次数</label>
+                    <input type="number" id="addPlaysInput" min="0" placeholder="例如：增加 10 次">
+                </div>
+                <div class="form-group" id="validUntilGroup">
+                    <label>到期时间</label>
+                    <input type="date" id="validUntilInput">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary close-btn">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Remarks Modal -->
+    <div id="remarksModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>修改备注</h2>
+            <form id="remarksForm">
+                <input type="hidden" id="remarksKeyValue">
+                <div class="form-group">
+                    <label>授权码</label>
+                    <input type="text" id="remarksKeyDisplay" disabled>
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="remarksInput" placeholder="例如：客户 A / 设备位置 / 门店名称">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary close-btn">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Play Sessions Modal -->
+    <div id="sessionsModal" class="modal">
+        <div class="modal-content sessions-modal-content">
+            <span class="close">&times;</span>
+            <h2>播放日志</h2>
+            <div id="sessionsList" class="sessions-list">
+                加载中...
+            </div>
         </div>
     </div>
 

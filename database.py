@@ -1,6 +1,5 @@
 import sqlite3
 import datetime
-import hashlib
 import os
 
 # Database path moved into dedicated folder to keep data isolated
@@ -21,6 +20,14 @@ def get_db_connection():
     conn.execute('PRAGMA foreign_keys = ON')
     return conn
 
+
+def ensure_column(cursor, table, column, definition):
+    cursor.execute(f"PRAGMA table_info({table})")
+    columns = [row[1] for row in cursor.fetchall()]
+    if column not in columns:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_db():
     conn = get_db_connection()
     c = conn.cursor()
@@ -32,9 +39,20 @@ def init_db():
             name TEXT UNIQUE NOT NULL,
             description TEXT,
             created_at TEXT NOT NULL,
-            is_default INTEGER DEFAULT 0
+            is_default INTEGER DEFAULT 0,
+            project_type TEXT DEFAULT 'activation'
         )
     ''')
+
+    try:
+        ensure_column(c, 'projects', 'project_type', "TEXT DEFAULT 'activation'")
+        c.execute(
+            "UPDATE projects SET project_type = 'activation' WHERE project_type IS NULL OR project_type = ''"
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"添加项目类型字段时出错: {e}")
+        conn.rollback()
 
     # Create Licenses table (replaces keys table)
     c.execute('''
@@ -46,6 +64,11 @@ def init_db():
             remarks TEXT,
             created_at TEXT NOT NULL,
             last_registered_at TEXT,
+            auth_type TEXT DEFAULT 'unlimited',
+            remaining_plays INTEGER,
+            valid_until TEXT,
+            machine_code TEXT,
+            last_play_started_at TEXT,
             FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
             UNIQUE(project_id, license_key)
         )
@@ -106,17 +129,41 @@ def init_db():
         print(f"迁移表结构时出错: {e}")
         conn.rollback()
 
-    # Add last_registered_at column if it doesn't exist (forward migration)
+    # Add forward-compatible authorization columns if they do not exist.
     try:
-        c.execute("PRAGMA table_info(licenses)")
-        columns = [row[1] for row in c.fetchall()]
-        if 'last_registered_at' not in columns:
-            c.execute('ALTER TABLE licenses ADD COLUMN last_registered_at TEXT')
-            conn.commit()
-            print("已添加 last_registered_at 字段")
+        ensure_column(c, 'licenses', 'last_registered_at', 'TEXT')
+        ensure_column(c, 'licenses', 'auth_type', "TEXT DEFAULT 'unlimited'")
+        ensure_column(c, 'licenses', 'remaining_plays', 'INTEGER')
+        ensure_column(c, 'licenses', 'valid_until', 'TEXT')
+        ensure_column(c, 'licenses', 'machine_code', 'TEXT')
+        ensure_column(c, 'licenses', 'last_play_started_at', 'TEXT')
+        conn.commit()
     except Exception as e:
-        print(f"添加 last_registered_at 字段时出错: {e}")
+        print(f"添加授权字段时出错: {e}")
         conn.rollback()
+
+    # Create play session logs for VR/client playback billing.
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS play_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            license_id INTEGER NOT NULL,
+            project_id INTEGER NOT NULL,
+            session_id TEXT UNIQUE NOT NULL,
+            machine_code TEXT,
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            last_heartbeat_at TEXT,
+            duration_seconds INTEGER,
+            status TEXT NOT NULL DEFAULT 'playing',
+            client_version TEXT,
+            remarks TEXT,
+            FOREIGN KEY (license_id) REFERENCES licenses (id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        )
+    ''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_play_sessions_license_id ON play_sessions(license_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_play_sessions_session_id ON play_sessions(session_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_play_sessions_status ON play_sessions(status)')
     
     # Create AdminUsers table
     c.execute('''
@@ -161,8 +208,11 @@ def init_db():
         c.execute('SELECT id FROM projects WHERE is_default = 1')
         if not c.fetchone():
             now = datetime.datetime.now().isoformat()
-            c.execute('INSERT INTO projects (name, description, created_at, is_default) VALUES (?, ?, ?, ?)',
-                      ('Default Project', 'System default project', now, 1))
+            c.execute('''
+                INSERT INTO projects (
+                    name, description, created_at, is_default, project_type
+                ) VALUES (?, ?, ?, ?, ?)
+            ''', ('Default Project', 'System default project', now, 1, 'activation'))
     except sqlite3.IntegrityError:
         pass # Already exists
     

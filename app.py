@@ -4,6 +4,7 @@ import hashlib
 import os
 import datetime
 import functools
+import uuid
 from database import get_db_connection, init_db
 
 app = Flask(__name__)
@@ -62,6 +63,138 @@ def generate_key():
     return f"KH-{part1}-{part2}"
 
 
+PLAY_SESSION_TIMEOUT_HOURS = 8
+COUNT_BASED_AUTH_TYPES = {"count", "count_date"}
+PROJECT_TYPES = {
+    "account": "账号管理",
+    "activation": "激活码授权管理",
+    "playback": "播控管理",
+}
+
+
+def normalize_project_type(project_type):
+    project_type = project_type or "activation"
+    if project_type not in PROJECT_TYPES:
+        return None
+    return project_type
+
+
+def utc_now_iso():
+    return datetime.datetime.now().isoformat()
+
+
+def parse_date_or_datetime(value):
+    if not value:
+        return None
+
+    try:
+        if len(value) == 10:
+            return datetime.datetime.combine(
+                datetime.date.fromisoformat(value), datetime.time.max
+            )
+        return datetime.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def is_license_expired(license_row):
+    expires_at = parse_date_or_datetime(license_row["valid_until"])
+    if not expires_at:
+        return False
+    return datetime.datetime.now() > expires_at
+
+
+def uses_play_count(license_row):
+    return license_row["auth_type"] in COUNT_BASED_AUTH_TYPES
+
+
+def has_remaining_plays(license_row):
+    if not uses_play_count(license_row):
+        return True
+    remaining = license_row["remaining_plays"]
+    return remaining is not None and remaining > 0
+
+
+def normalize_auth_type(auth_type):
+    allowed = {"unlimited", "count", "date", "count_date"}
+    if auth_type not in allowed:
+        return None
+    return auth_type
+
+
+def serialize_license_status(license_row):
+    expired = is_license_expired(license_row)
+    count_ok = has_remaining_plays(license_row)
+    active = bool(license_row["is_active"])
+    playable = active and not expired and count_ok
+
+    if not active:
+        message = "授权已禁用"
+    elif expired:
+        message = "授权已过期"
+    elif not count_ok:
+        message = "剩余播放次数不足"
+    else:
+        message = "授权可用"
+
+    return {
+        "id": license_row["id"],
+        "key": license_row["license_key"],
+        "project_id": license_row["project_id"],
+        "project_name": license_row["project_name"],
+        "project_type": license_row["project_type"],
+        "is_active": active,
+        "auth_type": license_row["auth_type"] or "unlimited",
+        "remaining_plays": license_row["remaining_plays"],
+        "valid_until": license_row["valid_until"],
+        "machine_code": license_row["machine_code"],
+        "last_play_started_at": license_row["last_play_started_at"],
+        "playable": playable,
+        "expired": expired,
+        "message": message,
+    }
+
+
+def get_license_for_client(conn, key_value, project_name):
+    return conn.execute(
+        """
+        SELECT l.*, p.name as project_name, p.project_type as project_type
+        FROM licenses l
+        JOIN projects p ON l.project_id = p.id
+        WHERE (l.license_key = ? OR (p.project_type = 'playback' AND l.machine_code = ?))
+            AND p.name = ?
+        """,
+        (key_value, key_value, project_name),
+    ).fetchone()
+
+
+def check_machine_code(license_row, machine_code):
+    expected = license_row["machine_code"]
+    if expected and expected != machine_code:
+        return False
+    return True
+
+
+def mark_stale_play_sessions(conn):
+    cutoff = (
+        datetime.datetime.now()
+        - datetime.timedelta(hours=PLAY_SESSION_TIMEOUT_HOURS)
+    ).isoformat()
+    conn.execute(
+        """
+        UPDATE play_sessions
+        SET status = 'timeout',
+            ended_at = COALESCE(ended_at, last_heartbeat_at, started_at),
+            duration_seconds = CAST(
+                (julianday(COALESCE(last_heartbeat_at, started_at)) - julianday(started_at)) * 86400
+                AS INTEGER
+            )
+        WHERE status = 'playing' AND started_at < ?
+        """,
+        (cutoff,),
+    )
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -79,10 +212,23 @@ def admin_page():
 
 @app.route("/docs")
 def docs_page():
-    from flask import redirect
-    # Check for admin token via query param or just rely on client-side check
-    # We serve the page but client JS will redirect if no token
-    return render_template("docs.html")
+    return render_template(
+        "docs.html",
+        doc_type="activation",
+        project_types=PROJECT_TYPES,
+    )
+
+
+@app.route("/docs/<doc_type>")
+def docs_by_type(doc_type):
+    doc_type = normalize_project_type(doc_type)
+    if not doc_type:
+        return jsonify({"message": "文档类型不存在"}), 404
+    return render_template(
+        "docs.html",
+        doc_type=doc_type,
+        project_types=PROJECT_TYPES,
+    )
 
 
 # --- Authentication API ---
@@ -126,17 +272,24 @@ def get_projects():
 @app.route("/api/projects", methods=["POST"])
 @require_admin_token
 def create_project():
-    data = request.json
+    data = request.json or {}
     name = data.get("name")
     description = data.get("description", "")
+    project_type = normalize_project_type(data.get("project_type"))
     if not name:
         return jsonify({"message": "项目名称必填"}), 400
+    if not project_type:
+        return jsonify({"message": "项目类型无效"}), 400
 
     conn = get_db_connection()
     try:
         conn.execute(
-            "INSERT INTO projects (name, description, created_at) VALUES (?, ?, ?)",
-            (name, description, datetime.datetime.now().isoformat()),
+            """
+            INSERT INTO projects (
+                name, description, project_type, created_at
+            ) VALUES (?, ?, ?, ?)
+            """,
+            (name, description, project_type, datetime.datetime.now().isoformat()),
         )
         conn.commit()
     except sqlite3.IntegrityError:
@@ -149,9 +302,14 @@ def create_project():
 @app.route("/api/projects/<int:id>", methods=["PUT"])
 @require_admin_token
 def update_project(id):
-    data = request.json
+    data = request.json or {}
     name = data.get("name")
     description = data.get("description")
+    project_type = data.get("project_type")
+    if project_type is not None:
+        project_type = normalize_project_type(project_type)
+        if not project_type:
+            return jsonify({"message": "项目类型无效"}), 400
 
     conn = get_db_connection()
     # Check if default
@@ -173,6 +331,9 @@ def update_project(id):
         if description is not None:
             updates.append("description = ?")
             params.append(description)
+        if project_type is not None:
+            updates.append("project_type = ?")
+            params.append(project_type)
 
         if updates:
             params.append(id)
@@ -234,22 +395,33 @@ def get_keys():
 @app.route("/api/keys", methods=["POST"])
 @require_admin_token
 def create_key():
-    data = request.json
+    data = request.json or {}
     project_id = data.get("project_id")
     remarks = data.get("remarks", "")
-    custom_key = data.get("custom_key")
+    custom_key = (data.get("custom_key") or "").strip()
 
     if not project_id:
         return jsonify({"message": "项目 ID 必填"}), 400
 
     conn = get_db_connection()
+    project = conn.execute(
+        "SELECT project_type FROM projects WHERE id = ?", (project_id,)
+    ).fetchone()
+    if not project:
+        conn.close()
+        return jsonify({"message": "项目不存在"}), 404
+
+    project_type = project["project_type"] or "activation"
+    if project_type == "playback" and not custom_key:
+        conn.close()
+        return jsonify({"message": "播控项目需填写客户端机器码"}), 400
 
     if custom_key:
-        # User provided custom key
         new_key = custom_key
     else:
-        # Auto-generate key
         new_key = generate_key()
+
+    machine_code = new_key if project_type == "playback" else None
 
     # Ensure uniqueness (simple retry logic)
     for attempt in range(5):
@@ -257,13 +429,14 @@ def create_key():
             conn.execute(
                 """INSERT INTO licenses (
                     project_id, license_key, 
-                    is_active, remarks, created_at
-                ) VALUES (?, ?, 1, ?, ?)""",
+                    is_active, remarks, created_at, machine_code
+                ) VALUES (?, ?, 1, ?, ?, ?)""",
                 (
                     project_id,
                     new_key,
                     remarks,
                     datetime.datetime.now().isoformat(),
+                    machine_code,
                 ),
             )
             conn.commit()
@@ -406,12 +579,118 @@ def update_key_remarks(key_value):
     return jsonify({"success": True, "message": "备注已更新"})
 
 
-# --- Verification API (Simplified, No Machine Binding) ---
+# --- License Entitlement Admin API ---
+@app.route("/api/licenses/<int:license_id>/entitlement", methods=["PUT"])
+@require_admin_token
+def update_license_entitlement(license_id):
+    data = request.json or {}
+    auth_type = normalize_auth_type(data.get("auth_type", "unlimited"))
+    if not auth_type:
+        return jsonify({"message": "授权类型无效"}), 400
+
+    remaining_plays = data.get("remaining_plays")
+    add_plays = data.get("add_plays")
+    valid_until = data.get("valid_until") or None
+
+    if valid_until and not parse_date_or_datetime(valid_until):
+        return jsonify({"message": "到期时间格式无效"}), 400
+
+    conn = get_db_connection()
+    license_row = conn.execute(
+        """
+        SELECT l.*, p.name as project_name, p.project_type as project_type
+        FROM licenses l
+        JOIN projects p ON l.project_id = p.id
+        WHERE l.id = ?
+        """,
+        (license_id,),
+    ).fetchone()
+    if not license_row:
+        conn.close()
+        return jsonify({"message": "未找到授权"}), 404
+    if license_row["project_type"] != "playback":
+        conn.close()
+        return jsonify({"message": "仅播控管理项目可设置次数和到期时间"}), 400
+
+    try:
+        if remaining_plays in ("", None):
+            next_remaining_plays = (
+                0 if auth_type in COUNT_BASED_AUTH_TYPES else None
+            )
+        else:
+            next_remaining_plays = int(remaining_plays)
+            if next_remaining_plays < 0:
+                raise ValueError
+
+        if add_plays not in ("", None):
+            add_plays = int(add_plays)
+            if add_plays < 0:
+                raise ValueError
+            next_remaining_plays = (next_remaining_plays or 0) + add_plays
+    except (TypeError, ValueError):
+        conn.close()
+        return jsonify({"message": "播放次数必须是非负整数"}), 400
+
+    conn.execute(
+        """
+        UPDATE licenses
+        SET auth_type = ?,
+            remaining_plays = ?,
+            valid_until = ?
+        WHERE id = ?
+        """,
+        (auth_type, next_remaining_plays, valid_until, license_id),
+    )
+    conn.commit()
+
+    row = conn.execute(
+        """
+        SELECT l.*, p.name as project_name, p.project_type as project_type
+        FROM licenses l
+        JOIN projects p ON l.project_id = p.id
+        WHERE l.id = ?
+        """,
+        (license_id,),
+    ).fetchone()
+    result = serialize_license_status(row)
+    conn.close()
+    return jsonify({"success": True, "message": "授权权益已更新", "license": result})
+
+
+@app.route("/api/licenses/<int:license_id>/play-sessions", methods=["GET"])
+@require_admin_token
+def get_license_play_sessions(license_id):
+    limit = request.args.get("limit", 100)
+    try:
+        limit = max(1, min(int(limit), 500))
+    except ValueError:
+        limit = 100
+
+    conn = get_db_connection()
+    mark_stale_play_sessions(conn)
+    conn.commit()
+
+    sessions = conn.execute(
+        """
+        SELECT *
+        FROM play_sessions
+        WHERE license_id = ?
+        ORDER BY started_at DESC
+        LIMIT ?
+        """,
+        (license_id, limit),
+    ).fetchall()
+    conn.close()
+    return jsonify([dict(session) for session in sessions])
+
+
+# --- Verification API ---
 @app.route("/api/verify", methods=["POST"])
 def verify_key():
-    data = request.json
+    data = request.json or {}
     key_value = data.get("key")
     project_name = data.get("project_name")
+    machine_code = data.get("machine_code")
 
     if not key_value:
         return jsonify({"valid": False, "message": "密钥不能为空"}), 400
@@ -421,30 +700,245 @@ def verify_key():
 
     conn = get_db_connection()
 
-    # Fetch license info by license_key and project_name
-    query = """
-        SELECT l.*, p.name as project_name
-        FROM licenses l
-        JOIN projects p ON l.project_id = p.id
-        WHERE l.license_key = ? AND p.name = ?
-    """
-    license_row = conn.execute(query, (key_value, project_name)).fetchone()
+    license_row = get_license_for_client(conn, key_value, project_name)
 
     if not license_row:
         conn.close()
         return jsonify({"valid": False, "message": "未找到该密钥在此项目下的授权"}), 404
 
-    # Check Active Status
-    if not license_row["is_active"]:
+    if not check_machine_code(license_row, machine_code):
         conn.close()
-        return jsonify({"valid": False, "message": "授权已禁用"}), 403
+        return jsonify({"valid": False, "message": "机器码不匹配"}), 403
+
+    status = serialize_license_status(license_row)
+    if not status["playable"]:
+        conn.close()
+        return jsonify({"valid": False, "message": status["message"], **status}), 403
 
     conn.close()
     return jsonify({
         "valid": True,
         "message": "验证通过",
-        "project_name": license_row["project_name"]
+        **status
     })
+
+
+# --- Public Playback API ---
+@app.route("/api/license/status", methods=["POST"])
+def license_status():
+    data = request.json or {}
+    key_value = data.get("key") or data.get("machine_code")
+    project_name = data.get("project_name")
+    machine_code = data.get("machine_code") or key_value
+
+    if not key_value:
+        return jsonify({"valid": False, "message": "机器码不能为空"}), 400
+    if not project_name:
+        return jsonify({"valid": False, "message": "项目名称不能为空"}), 400
+
+    conn = get_db_connection()
+    license_row = get_license_for_client(conn, key_value, project_name)
+    if not license_row:
+        conn.close()
+        return jsonify({"valid": False, "message": "未找到该密钥在此项目下的授权"}), 404
+
+    if not check_machine_code(license_row, machine_code):
+        conn.close()
+        return jsonify({"valid": False, "message": "机器码不匹配"}), 403
+
+    if license_row["project_type"] != "playback":
+        conn.close()
+        return jsonify({"valid": False, "message": "该项目不是播控管理类型"}), 400
+
+    status = serialize_license_status(license_row)
+    conn.close()
+    return jsonify({"valid": status["playable"], **status})
+
+
+@app.route("/api/play/start", methods=["POST"])
+def start_play():
+    data = request.json or {}
+    key_value = data.get("key") or data.get("machine_code")
+    project_name = data.get("project_name")
+    machine_code = data.get("machine_code") or key_value
+    client_version = data.get("client_version")
+    remarks = data.get("remarks", "")
+
+    if not key_value:
+        return jsonify({"success": False, "message": "机器码不能为空"}), 400
+    if not project_name:
+        return jsonify({"success": False, "message": "项目名称不能为空"}), 400
+    if not machine_code:
+        return jsonify({"success": False, "message": "机器码不能为空"}), 400
+
+    conn = get_db_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        mark_stale_play_sessions(conn)
+        license_row = get_license_for_client(conn, key_value, project_name)
+        if not license_row:
+            conn.rollback()
+            conn.close()
+            return jsonify({"success": False, "message": "未找到该密钥在此项目下的授权"}), 404
+
+        if not check_machine_code(license_row, machine_code):
+            conn.rollback()
+            conn.close()
+            return jsonify({"success": False, "message": "机器码不匹配"}), 403
+
+        if license_row["project_type"] != "playback":
+            conn.rollback()
+            conn.close()
+            return jsonify({"success": False, "message": "该项目不是播控管理类型"}), 400
+
+        status = serialize_license_status(license_row)
+        if not status["playable"]:
+            conn.rollback()
+            conn.close()
+            return jsonify({"success": False, "message": status["message"], **status}), 403
+
+        now = utc_now_iso()
+        if uses_play_count(license_row):
+            cursor = conn.execute(
+                """
+                UPDATE licenses
+                SET remaining_plays = remaining_plays - 1,
+                    last_play_started_at = ?
+                WHERE id = ? AND remaining_plays > 0
+                """,
+                (now, license_row["id"]),
+            )
+            if cursor.rowcount == 0:
+                conn.rollback()
+                conn.close()
+                return jsonify({"success": False, "message": "剩余播放次数不足"}), 403
+        else:
+            conn.execute(
+                "UPDATE licenses SET last_play_started_at = ? WHERE id = ?",
+                (now, license_row["id"]),
+            )
+
+        session_id = uuid.uuid4().hex
+        conn.execute(
+            """
+            INSERT INTO play_sessions (
+                license_id, project_id, session_id, machine_code,
+                started_at, last_heartbeat_at, status, client_version, remarks
+            ) VALUES (?, ?, ?, ?, ?, ?, 'playing', ?, ?)
+            """,
+            (
+                license_row["id"],
+                license_row["project_id"],
+                session_id,
+                machine_code,
+                now,
+                now,
+                client_version,
+                remarks,
+            ),
+        )
+        conn.commit()
+
+        updated = conn.execute(
+            """
+            SELECT l.*, p.name as project_name, p.project_type as project_type
+            FROM licenses l
+            JOIN projects p ON l.project_id = p.id
+            WHERE l.id = ?
+            """,
+            (license_row["id"],),
+        ).fetchone()
+        updated_status = serialize_license_status(updated)
+        conn.close()
+        return jsonify({
+            "success": True,
+            "message": "播放已开始",
+            "session_id": session_id,
+            **updated_status,
+        })
+    except Exception as exc:
+        conn.rollback()
+        conn.close()
+        return jsonify({"success": False, "message": f"开始播放失败: {str(exc)}"}), 500
+
+
+@app.route("/api/play/end", methods=["POST"])
+def end_play():
+    data = request.json or {}
+    session_id = data.get("session_id")
+    remarks = data.get("remarks")
+
+    if not session_id:
+        return jsonify({"success": False, "message": "session_id 不能为空"}), 400
+
+    conn = get_db_connection()
+    session = conn.execute(
+        "SELECT * FROM play_sessions WHERE session_id = ?", (session_id,)
+    ).fetchone()
+    if not session:
+        conn.close()
+        return jsonify({"success": False, "message": "未找到播放记录"}), 404
+
+    if session["status"] == "ended":
+        conn.close()
+        return jsonify({"success": True, "message": "播放已结束"})
+
+    now = utc_now_iso()
+    started_at = parse_date_or_datetime(session["started_at"])
+    duration_seconds = None
+    if started_at:
+        duration_seconds = max(
+            0, int((datetime.datetime.now() - started_at).total_seconds())
+        )
+
+    conn.execute(
+        """
+        UPDATE play_sessions
+        SET ended_at = ?,
+            last_heartbeat_at = ?,
+            duration_seconds = ?,
+            status = 'ended',
+            remarks = COALESCE(?, remarks)
+        WHERE session_id = ?
+        """,
+        (now, now, duration_seconds, remarks, session_id),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({
+        "success": True,
+        "message": "播放已结束",
+        "session_id": session_id,
+        "duration_seconds": duration_seconds,
+    })
+
+
+@app.route("/api/play/heartbeat", methods=["POST"])
+def play_heartbeat():
+    data = request.json or {}
+    session_id = data.get("session_id")
+    if not session_id:
+        return jsonify({"success": False, "message": "session_id 不能为空"}), 400
+
+    conn = get_db_connection()
+    session = conn.execute(
+        "SELECT status FROM play_sessions WHERE session_id = ?", (session_id,)
+    ).fetchone()
+    if not session:
+        conn.close()
+        return jsonify({"success": False, "message": "未找到播放记录"}), 404
+
+    if session["status"] != "playing":
+        conn.close()
+        return jsonify({"success": False, "message": "播放记录已结束"}), 409
+
+    conn.execute(
+        "UPDATE play_sessions SET last_heartbeat_at = ? WHERE session_id = ?",
+        (utc_now_iso(), session_id),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "message": "心跳已记录"})
 
 
 # --- Admin Management API ---
@@ -605,4 +1099,4 @@ def update_admin_password(username):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=True)

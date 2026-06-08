@@ -50,6 +50,33 @@
     border: 1px solid var(--accent-color);
 }
 
+.docs-tabs {
+    max-width: 1400px;
+    margin: 1rem auto 0;
+    padding: 0 2rem;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.docs-tab {
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.6rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--card-bg);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.docs-tab:hover,
+.docs-tab.active {
+    color: var(--text-primary);
+    border-color: var(--accent-color);
+    background: rgba(99, 102, 241, 0.1);
+}
+
 .docs-layout {
     display: flex;
     max-width: 1400px;
@@ -472,6 +499,15 @@ pre code {
     .docs-header {
         flex-wrap: wrap;
         gap: 1rem;
+    }
+
+    .docs-tabs {
+        padding: 0 1rem;
+    }
+
+    .docs-tab {
+        flex: 1;
+        text-align: center;
     }
 
     .nav-menu {
