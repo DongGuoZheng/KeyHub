@@ -150,6 +150,7 @@ def init_db():
             project_id INTEGER NOT NULL,
             session_id TEXT UNIQUE NOT NULL,
             machine_code TEXT,
+            device_ip TEXT,
             started_at TEXT NOT NULL,
             ended_at TEXT,
             last_heartbeat_at TEXT,
@@ -161,6 +162,7 @@ def init_db():
             FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
         )
     ''')
+    ensure_column(c, 'play_sessions', 'device_ip', 'TEXT')
     c.execute('CREATE INDEX IF NOT EXISTS idx_play_sessions_license_id ON play_sessions(license_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_play_sessions_session_id ON play_sessions(session_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_play_sessions_status ON play_sessions(status)')

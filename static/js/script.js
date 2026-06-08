@@ -566,6 +566,7 @@ function renderSessions(sessions) {
                 <th>结束时间</th>
                 <th>时长</th>
                 <th>机器码</th>
+                <th>设备公网IP</th>
                 <th>客户端版本</th>
             </tr>
         </thead>
@@ -585,6 +586,7 @@ function renderSessions(sessions) {
             <td>${escapeHtml(endedAt)}</td>
             <td>${escapeHtml(duration)}</td>
             <td><span class="key-mono">${escapeHtml(session.machine_code || '-')}</span></td>
+            <td><span class="key-mono">${escapeHtml(session.device_ip || '-')}</span></td>
             <td>${escapeHtml(session.client_version || '-')}</td>
         `;
         tbody.appendChild(tr);

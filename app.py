@@ -5,6 +5,7 @@ import os
 import datetime
 import functools
 import uuid
+import ipaddress
 from database import get_db_connection, init_db
 
 app = Flask(__name__)
@@ -173,6 +174,68 @@ def check_machine_code(license_row, machine_code):
     if expected and expected != machine_code:
         return False
     return True
+
+
+def normalize_ip_address(value):
+    value = (value or "").strip()
+    if not value:
+        return None
+
+    if value.startswith("[") and "]" in value:
+        value = value[1:value.index("]")]
+    elif value.count(":") == 1 and "." in value:
+        value = value.rsplit(":", 1)[0]
+
+    try:
+        return str(ipaddress.ip_address(value))
+    except ValueError:
+        return None
+
+
+def is_public_ip(value):
+    normalized = normalize_ip_address(value)
+    if not normalized:
+        return False
+
+    ip = ipaddress.ip_address(normalized)
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def get_request_public_ip():
+    candidates = []
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    candidates.extend(ip.strip() for ip in forwarded_for.split(",") if ip.strip())
+    candidates.extend([
+        request.headers.get("X-Real-IP"),
+        request.headers.get("CF-Connecting-IP"),
+        request.remote_addr,
+    ])
+
+    normalized_candidates = []
+    for candidate in candidates:
+        normalized = normalize_ip_address(candidate)
+        if normalized:
+            normalized_candidates.append(normalized)
+            if is_public_ip(normalized):
+                return normalized
+
+    return normalized_candidates[0] if normalized_candidates else None
+
+
+def choose_device_ip(submitted_ip):
+    request_ip = get_request_public_ip()
+    if request_ip:
+        return request_ip
+
+    normalized_submitted = normalize_ip_address(submitted_ip)
+    return normalized_submitted
 
 
 def mark_stale_play_sessions(conn):
@@ -761,6 +824,7 @@ def start_play():
     key_value = data.get("key") or data.get("machine_code")
     project_name = data.get("project_name")
     machine_code = data.get("machine_code") or key_value
+    device_ip = choose_device_ip(data.get("device_ip"))
     client_version = data.get("client_version")
     remarks = data.get("remarks", "")
 
@@ -822,15 +886,16 @@ def start_play():
         conn.execute(
             """
             INSERT INTO play_sessions (
-                license_id, project_id, session_id, machine_code,
+                license_id, project_id, session_id, machine_code, device_ip,
                 started_at, last_heartbeat_at, status, client_version, remarks
-            ) VALUES (?, ?, ?, ?, ?, ?, 'playing', ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'playing', ?, ?)
             """,
             (
                 license_row["id"],
                 license_row["project_id"],
                 session_id,
                 machine_code,
+                device_ip,
                 now,
                 now,
                 client_version,
