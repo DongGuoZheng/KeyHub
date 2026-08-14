@@ -26,6 +26,7 @@ const keyModal = document.getElementById('keyModal');
 const entitlementModal = document.getElementById('entitlementModal');
 const remarksModal = document.getElementById('remarksModal');
 const sessionsModal = document.getElementById('sessionsModal');
+const exportSessionsBtn = document.getElementById('exportSessionsBtn');
 const closeButtons = document.querySelectorAll('.close, .close-btn');
 
 // Forms
@@ -40,6 +41,7 @@ const validUntilGroup = document.getElementById('validUntilGroup');
 
 // State
 let currentProject = null;
+let currentSessionsLicenseId = null;
 let projects = [];
 
 const projectTypeLabels = {
@@ -123,6 +125,7 @@ function setupEventListeners() {
     });
 
     deleteProjectBtn.addEventListener('click', deleteCurrentProject);
+    exportSessionsBtn.addEventListener('click', exportPlaySessions);
 
     // Toolbar
     refreshBtn.addEventListener('click', loadKeys);
@@ -535,15 +538,57 @@ async function handleEntitlementSubmit(e) {
 
 async function openSessionsModal(license) {
     const sessionsList = document.getElementById('sessionsList');
+    currentSessionsLicenseId = license.id;
+    exportSessionsBtn.disabled = true;
     sessionsList.textContent = '加载中...';
     openModal(sessionsModal);
 
     try {
         const res = await apiRequest(`/api/licenses/${license.id}/play-sessions`);
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.message || '加载日志失败');
+        }
         const sessions = await res.json();
         renderSessions(sessions);
+        exportSessionsBtn.disabled = false;
     } catch (e) {
         sessionsList.textContent = e.message || '加载日志失败';
+    }
+}
+
+async function exportPlaySessions() {
+    if (!currentSessionsLicenseId) return;
+
+    const originalText = exportSessionsBtn.textContent;
+    exportSessionsBtn.disabled = true;
+    exportSessionsBtn.textContent = '导出中...';
+
+    try {
+        const res = await apiRequest(`/api/licenses/${currentSessionsLicenseId}/play-sessions/export`);
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.message || '导出失败');
+        }
+
+        const blob = await res.blob();
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+        const filename = filenameMatch ? filenameMatch[1] : 'play-sessions.csv';
+        const downloadUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(downloadUrl);
+        showToast('播放日志已导出');
+    } catch (e) {
+        showToast(e.message || '导出失败');
+    } finally {
+        exportSessionsBtn.disabled = false;
+        exportSessionsBtn.textContent = originalText;
     }
 }
 

@@ -223,7 +223,10 @@
     <div id="sessionsModal" class="modal">
         <div class="modal-content sessions-modal-content">
             <span class="close">&times;</span>
-            <h2>播放日志</h2>
+            <div class="sessions-modal-header">
+                <h2>播放日志</h2>
+                <button type="button" id="exportSessionsBtn" class="btn btn-secondary" disabled>导出 CSV</button>
+            </div>
             <div id="sessionsList" class="sessions-list">
                 加载中...
             </div>

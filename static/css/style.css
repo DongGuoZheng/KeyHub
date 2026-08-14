@@ -342,8 +342,23 @@ tr:hover {
     max-width: 1280px;
 }
 
-.sessions-modal-content h2 {
-    padding-right: 2rem;
+.sessions-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-right: 2.5rem;
+}
+
+.sessions-modal-header .btn-secondary {
+    margin-right: 0;
+    flex: 0 0 auto;
+}
+
+.sessions-modal-header button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    transform: none;
 }
 
 .close {

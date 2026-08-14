@@ -1,6 +1,8 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, Response, render_template, request, jsonify
+import csv
 import sqlite3
 import hashlib
+import io
 import os
 import datetime
 import functools
@@ -745,6 +747,88 @@ def get_license_play_sessions(license_id):
     ).fetchall()
     conn.close()
     return jsonify([dict(session) for session in sessions])
+
+
+def csv_safe_value(value):
+    if value is None:
+        return ""
+
+    text = str(value)
+    if text.lstrip().startswith(("=", "+", "-", "@")):
+        return f"'{text}"
+    return text
+
+
+@app.route("/api/licenses/<int:license_id>/play-sessions/export", methods=["GET"])
+@require_admin_token
+def export_license_play_sessions(license_id):
+    conn = get_db_connection()
+    mark_stale_play_sessions(conn)
+    conn.commit()
+
+    license_row = conn.execute(
+        """
+        SELECT l.license_key, l.machine_code, p.name AS project_name
+        FROM licenses l
+        JOIN projects p ON l.project_id = p.id
+        WHERE l.id = ?
+        """,
+        (license_id,),
+    ).fetchone()
+    if not license_row:
+        conn.close()
+        return jsonify({"message": "授权不存在"}), 404
+
+    sessions = conn.execute(
+        """
+        SELECT *
+        FROM play_sessions
+        WHERE license_id = ?
+        ORDER BY started_at DESC
+        """,
+        (license_id,),
+    ).fetchall()
+    conn.close()
+
+    status_labels = {
+        "playing": "播放中",
+        "ended": "正常结束",
+        "timeout": "超时未结束",
+    }
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow([
+        "状态",
+        "开始时间",
+        "结束时间",
+        "时长（秒）",
+        "机器码",
+        "设备公网IP",
+        "客户端版本",
+        "会话ID",
+        "最后心跳时间",
+        "备注",
+    ])
+    for session in sessions:
+        writer.writerow([
+            status_labels.get(session["status"], session["status"]),
+            csv_safe_value(session["started_at"]),
+            csv_safe_value(session["ended_at"]),
+            session["duration_seconds"] if session["duration_seconds"] is not None else "",
+            csv_safe_value(session["machine_code"]),
+            csv_safe_value(session["device_ip"]),
+            csv_safe_value(session["client_version"]),
+            csv_safe_value(session["session_id"]),
+            csv_safe_value(session["last_heartbeat_at"]),
+            csv_safe_value(session["remarks"]),
+        ])
+
+    filename = f"play-sessions-license-{license_id}-{datetime.datetime.now():%Y%m%d-%H%M%S}.csv"
+    return Response(
+        "\ufeff" + output.getvalue(),
+        content_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # --- Verification API ---
