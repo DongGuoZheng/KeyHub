@@ -16,10 +16,18 @@ source.include_patterns = fonts/*.otf,fonts/*.ttf
 version = 0.1
 version.release = 0.1
 
-# Python 与依赖库
-# 用 p4a 默认 Python (3.14.x): p4a 已为其适配 NDK r28 的补丁。
-# 手动指定 3.11 会导致 grpmodule.c 与 NDK r28 不兼容而编译失败。
-requirements = python3,kivy==2.3.0
+# ============================================================
+# 依赖配置 (踩坑总结, 请勿随意改动)
+#
+# 为什么锁 Python 3.11.9 而不是用默认的 3.14:
+#   Kivy 2.3.0 的 Cython 生成代码不兼容 Python 3.14, 会报
+#   "weakproxy.c: error: too few arguments to function call"
+#
+# 为什么 hostpython3 必须一起锁:
+#   p4a 要求两者版本严格一致, 否则报
+#   "python3 should have same version as hostpython3"
+# ============================================================
+requirements = hostpython3==3.11.9,python3==3.11.9,kivy==2.3.0
 
 # 打包引导方式 (sdl2 标准方案)
 p4a.bootstrap = sdl2
@@ -27,22 +35,21 @@ p4a.bootstrap = sdl2
 # 权限 (示例不需要任何权限)
 android.permissions =
 
-# 架构: 只打 arm64-v8a, 覆盖 2017 年后几乎所有手机, 构建更快
+# 架构: 只打 arm64-v8a, 覆盖 2017 年后几乎所有手机
 android.archs = arm64-v8a
 
 # ============================================================
-# 重要: 不要自定义下面这几项!
-# buildozer 默认是 minapi=24 / api=36 / ndk=28c,
-# 官方预编译 wheel (pyjnius 等) 就是按这些默认值构建的。
-# 改成别的值会导致找不到匹配平台的 wheel
-# ("No matching distribution found for pyjnius")。
-# 实测踩坑:
-#   - minapi=21 -> 找 android_21_* wheel, 找不到
-#   - ndk=25b   -> 若写错配置段落则不生效
+# NDK / API 配置 (必须写在 [app] 段! 写错段落不生效)
+#
+# 为什么用 NDK 25b 而不是默认的 28c:
+#   NDK r26+ 移除了 setgrent/getgrent/endgrent 等函数,
+#   Python 3.11 的 grpmodule.c 编译会失败:
+#   "error: call to undeclared function 'setgrent'"
+#   NDK 25b 与 Python 3.11 是配套验证过的组合。
 # ============================================================
-# android.minapi = 24
-# android.api = 36
-# android.ndk = 28c
+android.ndk = 25b
+android.api = 33
+android.minapi = 24
 
 [buildozer]
 
