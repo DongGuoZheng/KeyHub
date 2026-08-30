@@ -27,13 +27,15 @@ version.release = 0.1
 #   p4a 要求两者版本严格一致, 否则报
 #   "python3 should have same version as hostpython3"
 # ============================================================
-requirements = hostpython3==3.11.9,python3==3.11.9,kivy==2.3.0
+# plyer: 安卓能力封装库 (传感器/电池/振动/通知/TTS/剪贴板/GPS/闪光灯)
+# pyjnius 由 sdl2 bootstrap 自动引入, 无需显式声明
+requirements = hostpython3==3.11.9,python3==3.11.9,kivy==2.3.0,plyer
 
 # 打包引导方式 (sdl2 标准方案)
 p4a.bootstrap = sdl2
 
-# 权限 (示例不需要任何权限)
-android.permissions =
+# 权限声明 (对应 main.py 调用的安卓能力, 缺一个对应功能就静默失效)
+android.permissions = INTERNET,VIBRATE,CAMERA,FLASHLIGHT,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,READ_PHONE_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
 # 架构: 只打 arm64-v8a, 覆盖 2017 年后几乎所有手机
 android.archs = arm64-v8a
