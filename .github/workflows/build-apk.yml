@@ -33,7 +33,9 @@ jobs:
           ls -la fonts/
 
       - name: Build APK
-        run: buildozer -v android debug
+        # 容器内以 root 运行, buildozer 会弹 "Are you sure..." 交互确认,
+        # 用 yes | 自动应答, 否则 CI 无 stdin 会 EOFError 崩溃
+        run: yes | buildozer -v android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
