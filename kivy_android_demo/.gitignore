@@ -1,0 +1,21 @@
+# Buildozer / python-for-android 构建产物
+bin/
+.buildozer/
+.buildozer_global/
+__pycache__/
+*.pyc
+*.spec.bak
+
+# Android SDK / NDK (体积巨大)
+.android/
+.android-sdk/
+android-sdk/
+.sdk/
+
+# 非源码资源 (由 CI 自动下载)
+fonts/*.otf
+fonts/*.ttf
+
+# 编辑器
+.vscode/
+.idea/
