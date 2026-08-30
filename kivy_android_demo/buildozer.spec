@@ -17,7 +17,9 @@ version = 0.1
 version.release = 0.1
 
 # Python 与依赖库
-requirements = python3,kivy==2.3.0
+# 必须锁定 Python 3.11! p4a 默认用 3.14, 但 pyjnius 等依赖还没有
+# 3.14 的安卓预编译包, 会报 "No matching distribution found for pyjnius"
+requirements = python3==3.11.9,kivy==2.3.0
 
 # 打包引导方式 (sdl2 是标准方案, 不要动)
 p4a.bootstrap = sdl2
