@@ -19,10 +19,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download Chinese font
+        # 注意: kivy/buildozer 容器内没有 curl/wget, 用容器自带的 python3 下载
         run: |
           mkdir -p fonts
-          curl -sL -o fonts/NotoSansSC-Regular.otf \
-            "https://raw.githubusercontent.com/googlefonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
+          python3 -c "
+          import urllib.request, os
+          url = 'https://raw.githubusercontent.com/googlefonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf'
+          urllib.request.urlretrieve(url, 'fonts/NotoSansSC-Regular.otf')
+          size = os.path.getsize('fonts/NotoSansSC-Regular.otf')
+          print('字体下载完成: %d bytes' % size)
+          assert size > 1000000, '字体下载异常, 文件过小'
+          "
           ls -la fonts/
 
       - name: Build APK
