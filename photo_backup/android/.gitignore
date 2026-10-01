@@ -1,0 +1,4 @@
+bin/
+.buildozer/
+fonts/
+*.apk

@@ -1,0 +1,47 @@
+name: Build PhotoBackup APK
+
+# 只在 photo_backup 目录有变动或手动触发时构建, 避免和另一个 demo 的 workflow 抢跑
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'photo_backup/**'
+      - '.github/workflows/build-photobackup.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: kivy/buildozer          # Kivy 官方打包镜像, 自带 buildozer + Android 工具链
+    defaults:
+      run:
+        working-directory: photo_backup/android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Chinese font
+        # kivy/buildozer 容器内没有 curl/wget, 用容器自带的 python3 下载
+        run: |
+          mkdir -p fonts
+          python3 -c "
+          import urllib.request, os
+          url = 'https://raw.githubusercontent.com/googlefonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf'
+          urllib.request.urlretrieve(url, 'fonts/NotoSansSC-Regular.otf')
+          size = os.path.getsize('fonts/NotoSansSC-Regular.otf')
+          print('字体下载完成: %d bytes' % size)
+          assert size > 1000000, '字体下载异常, 文件过小'
+          "
+          ls -la fonts/
+
+      - name: Build APK
+        # buildozer 在 root 下会弹交互确认, 用 yes | 自动应答, 否则 CI 无 stdin 会 EOFError
+        run: yes | buildozer -v android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: photobackup-apk
+          path: photo_backup/android/bin/*.apk
+          if-no-files-found: error
