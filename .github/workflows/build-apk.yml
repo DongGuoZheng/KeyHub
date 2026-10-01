@@ -1,9 +1,13 @@
 name: Build APK
 
 # 推送到 main 分支或手动触发时打包
+# 加路径过滤: 只有 demo 目录变动才构建, 否则仓库里任何推送都会触发这个 workflow
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - 'kivy_android_demo/**'
+      - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
 jobs:
