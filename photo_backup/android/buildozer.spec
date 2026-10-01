@@ -1,7 +1,7 @@
 [app]
 
 # 应用名 (显示在手机桌面上)
-title = 相册备份
+title = 监控直播
 
 # 包名 (安卓唯一标识)
 package.name = photobackup

