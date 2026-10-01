@@ -41,7 +41,24 @@ IMAGE_EXT = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".bmp")
 VIDEO_EXT = (".mp4", ".mov", ".avi", ".mkv", ".webm", ".3gp")
 FONT_PATH = "fonts/NotoSansSC-Regular.otf"
 
-IS_ANDROID = hasattr(sys, "getandroidapilevel") or "ANDROID_ARGUMENT" in os.environ
+def _detect_android():
+    """判定是否运行在安卓上。
+
+    不能只靠 sys.getandroidapilevel 或 ANDROID_ARGUMENT —— 部分 p4a 版本下这两个都不存在,
+    一旦误判为非安卓, ensure_permissions 会直接跳过申请(不弹窗), scan_media 会去扫桌面目录(0 个文件),
+    症状是"既没要权限也什么都扫不到"。最可靠的是能否 import p4a 提供的 android 模块。
+    """
+    try:
+        import android  # noqa: F401  p4a 环境专有
+        return True
+    except ImportError:
+        pass
+    if hasattr(sys, "getandroidapilevel"):
+        return True
+    return bool(os.environ.get("ANDROID_ARGUMENT") or os.environ.get("ANDROID_APP_PATH"))
+
+
+IS_ANDROID = _detect_android()
 
 
 # ===================== 安卓能力封装 (全部可降级) =====================
@@ -92,40 +109,63 @@ def device_name():
         return "unknown-device"
 
 
-def ensure_permissions(include_video):
+def ensure_permissions(include_video, logger=None):
     """Android 13+ 用 READ_MEDIA_IMAGES/VIDEO, 旧版用 READ_EXTERNAL_STORAGE"""
+    def _log(m):
+        try:
+            (logger or print)(m)
+        except Exception:
+            pass
+
     if not IS_ANDROID:
+        _log("!! 非安卓环境, 跳过权限申请")
         return True
     try:
         from android.permissions import request_permissions, check_permission
         from jnius import autoclass
         Manifest = autoclass("android.Manifest$permission")
-    except Exception:
+    except Exception as e:
+        _log("权限模块不可用: %r" % (e,))
         return True
 
-    names = ["READ_MEDIA_IMAGES"] if sdk_int() >= 33 else ["READ_EXTERNAL_STORAGE"]
+    sdk = sdk_int()
+    names = ["READ_MEDIA_IMAGES"] if sdk >= 33 else ["READ_EXTERNAL_STORAGE"]
     if include_video:
-        names.append("READ_MEDIA_VIDEO" if sdk_int() >= 33 else "READ_EXTERNAL_STORAGE")
+        names.append("READ_MEDIA_VIDEO" if sdk >= 33 else "READ_EXTERNAL_STORAGE")
+    _log("SDK=%d, 需要权限: %s" % (sdk, " / ".join(names)))
 
-    granted, missing = [], []
+    missing = []
     for n in names:
         perm = getattr(Manifest, n, None) or n
         try:
-            (granted if check_permission(perm) else missing).append(perm)
-        except Exception:
+            ok = bool(check_permission(perm))
+        except Exception as e:
+            ok = False
+            _log("   检查 %s 异常: %r" % (n, e))
+        _log("   %s -> %s" % (n, "已授权" if ok else "未授权"))
+        if not ok:
             missing.append(perm)
+
     if not missing:
         return True
     try:
         request_permissions(missing)
-    except Exception:
-        pass
+        _log("已发起 %d 项权限申请, 请在弹窗点允许后重试" % len(missing))
+    except Exception as e:
+        _log("申请权限失败: %r" % (e,))
     return False
 
 
-def scan_media(include_video):
+def scan_media(include_video, logger=None):
     """扫描 MediaStore 相册。分区存储下不能直接扫目录, 必须走 ContentResolver"""
+    def _log(m):
+        try:
+            (logger or print)(m)
+        except Exception:
+            pass
+
     if not IS_ANDROID:
+        _log("!! 判定为非安卓环境, 走桌面模拟扫描 (真机上出现这行说明环境检测有问题)")
         return scan_media_desktop(include_video)
 
     try:
@@ -134,42 +174,54 @@ def scan_media(include_video):
         resolver = activity.getContentResolver()
         Media = autoclass("android.provider.MediaStore")
     except Exception as e:
-        print("MediaStore 不可用: %s" % e)
+        _log("MediaStore 不可用: %r" % (e,))
         return []
 
-    out = []
-    uris = [(Media.Images.Media.EXTERNAL_CONTENT_URI, False)]
+    proj = ["_id", "_display_name", "size", "date_modified", "_data"]
+    sources = [(Media.Images.Media.EXTERNAL_CONTENT_URI, "image")]
     if include_video:
-        uris.append((Media.Video.Media.EXTERNAL_CONTENT_URI, True))
+        sources.append((Media.Video.Media.EXTERNAL_CONTENT_URI, "video"))
 
-    for uri, _ in uris:
+    out = []
+    for base_uri, kind in sources:
         cursor = None
         try:
-            cursor = resolver.query(uri, None, None, None, "_id ASC")
+            try:
+                cursor = resolver.query(base_uri, proj, None, None, "_id ASC")
+            except Exception:
+                cursor = resolver.query(base_uri, None, None, None, "_id ASC")
             if cursor is None:
+                _log("%s: query 返回 null (权限不足或 MediaStore 不可用)" % kind)
                 continue
-            i_id = cursor.getColumnIndex("_id")
-            i_name = cursor.getColumnIndex("_display_name")
-            i_size = cursor.getColumnIndex("size")
-            i_mt = cursor.getColumnIndex("date_modified")
-            i_data = cursor.getColumnIndex("_data")
+            cols = {}
+            for n in proj:
+                cols[n] = cursor.getColumnIndex(n)
+            raw = cursor.getCount()
+            usable = 0
+            unreadable = 0
             while cursor.moveToNext():
                 try:
-                    path = cursor.getString(i_data) if i_data >= 0 else None
-                    if not path or not os.path.exists(path):
-                        continue
-                    name = cursor.getString(i_name) or os.path.basename(path)
-                    size = cursor.getLong(i_size) if i_size >= 0 else os.path.getsize(path)
-                    mtime = int(cursor.getLong(i_mt)) if i_mt >= 0 else int(os.path.getmtime(path))
-                    out.append({
-                        "id": cursor.getLong(i_id), "path": path, "name": name,
-                        "size": int(size), "mtime": mtime,
-                        "key": "%s|%d|%d" % (name, size, mtime),
-                    })
+                    iid = cursor.getLong(cols["_id"])
+                    name = cursor.getString(cols["_display_name"]) or ""
+                    size = int(cursor.getLong(cols["size"]))
+                    mtime = int(cursor.getLong(cols["date_modified"]))
+                    path = cursor.getString(cols["_data"]) or ""
                 except Exception:
                     continue
+                if not name:
+                    continue
+                readable = bool(path) and os.path.exists(path) and os.access(path, os.R_OK)
+                if not readable:
+                    unreadable += 1
+                out.append({
+                    "id": iid, "kind": kind, "path": path if readable else "",
+                    "name": name, "size": size, "mtime": mtime,
+                    "key": "%s|%d|%d" % (name, size, mtime),
+                })
+                usable += 1
+            _log("%s: 索引 %d 条, 可用 %d 条, 路径不可读 %d 条" % (kind, raw, usable, unreadable))
         except Exception as e:
-            print("查询失败: %s" % e)
+            _log("%s: 查询失败 %r" % (kind, e))
         finally:
             try:
                 if cursor:
@@ -258,18 +310,55 @@ def api_check(base, items, device):
     return missing
 
 
+def open_item_stream(item):
+    """打开文件句柄: 优先直接读路径, 路径不可读时退回 ContentResolver 的文件描述符。
+
+    为什么用 fd 而不是 InputStream: ContentResolver.openInputStream 只能用 Java 的
+    read(byte[]) 逐块读, pyjnius 每次调用都有 JNI 开销, 一张 5MB 照片要几十秒。
+    openFileDescriptor 拿到的是原生 fd, dup 一份交给 Python 的 os 层读, 速度和直接 open 一样。
+    """
+    if item.get("path"):
+        try:
+            f = open(item["path"], "rb")
+            return f, int(os.fstat(f.fileno()).st_size)
+        except Exception:
+            pass
+    try:
+        from jnius import autoclass
+        resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+        Media = autoclass("android.provider.MediaStore")
+        Uri = autoclass("android.net.Uri")
+        base = (Media.Images.Media.EXTERNAL_CONTENT_URI if item.get("kind") == "image"
+                else Media.Video.Media.EXTERNAL_CONTENT_URI)
+        uri = Uri.withAppendedPath(base, str(item["id"]))
+        pfd = resolver.openFileDescriptor(uri, "r")
+        if pfd is None:
+            raise OSError("openFileDescriptor 返回 null")
+        size = int(pfd.getStatSize())
+        f = os.fdopen(os.dup(pfd.getFd()), "rb")
+        pfd.close()
+        return f, size
+    except Exception as e:
+        raise OSError("无法打开文件 %s: %r" % (item.get("name"), e))
+
+
 def api_upload(base, item, device):
     """流式上传单个文件, 不整块读进内存"""
+    stream, size = open_item_stream(item)
     q = urllib.parse.urlencode({
         "key": item["key"], "name": item["name"],
         "mtime": item["mtime"], "device": device,
     })
-    url = "%s/api/upload?%s" % (base, q)
-    with open(item["path"], "rb") as f:
-        req = urllib.request.Request(url, data=f, method="POST")
-        req.add_header("Content-Length", str(item["size"]))
+    try:
+        req = urllib.request.Request("%s/api/upload?%s" % (base, q), data=stream, method="POST")
+        req.add_header("Content-Length", str(size))
         with urllib.request.urlopen(req, timeout=UPLOAD_TIMEOUT) as r:
             return json.loads(r.read().decode("utf-8"))
+    finally:
+        try:
+            stream.close()
+        except Exception:
+            pass
 
 
 def api_hello(base):
@@ -364,6 +453,7 @@ class RootWidget(BoxLayout):
         sc = ScrollView(size_hint=(1, 1))
         sc.add_widget(self.log_label)
         self.add_widget(sc)
+        Clock.schedule_once(lambda dt: self._env_banner(), 0.3)
 
     # ---------- 日志 (线程安全) ----------
     def log(self, msg):
@@ -383,6 +473,24 @@ class RootWidget(BoxLayout):
             self.progress.max = max(total, 1)
             self.progress.value = done
         Clock.schedule_once(_u)
+
+    def _env_banner(self):
+        """启动自检: 环境判定 / SDK / 权限状态直接显示在界面上, 方便一眼看出卡在哪"""
+        self.log("=== 环境自检 ===")
+        self.log("IS_ANDROID=%s  SDK=%s" % (IS_ANDROID, sdk_int()))
+        self.log("设备: %s" % device_name())
+        names = ["READ_MEDIA_IMAGES"] if sdk_int() >= 33 else ["READ_EXTERNAL_STORAGE"]
+        try:
+            from android.permissions import check_permission
+            from jnius import autoclass
+            Manifest = autoclass("android.Manifest$permission")
+            for n in names:
+                perm = getattr(Manifest, n, None) or n
+                self.log("权限 %s: %s" % (
+                    n, "已授权" if check_permission(perm) else "未授权"))
+        except Exception as e:
+            self.log("权限自检失败: %r" % (e,))
+        self.log("===================")
 
     # ---------- 交互 ----------
     def on_discover(self, *a):
@@ -443,19 +551,22 @@ class RootWidget(BoxLayout):
     # ---------- 备份主流程 ----------
     def _worker(self, base, include_video):
         try:
-            keep_screen_on()
+            self.log("环境: IS_ANDROID=%s SDK=%s 设备=%s" % (IS_ANDROID, sdk_int(), device_name()))
+            if keep_screen_on():
+                self.log("已开启屏幕常亮")
             self.log("检查相册权限...")
-            if not ensure_permissions(include_video):
-                self.log("已向系统申请权限, 请在弹窗点允许, 然后再点一次「开始备份」")
+            if not ensure_permissions(include_video, logger=self.log):
+                self.log("请在权限弹窗点允许, 然后再点一次「开始备份」")
                 return
 
             self.set_status("正在扫描相册...")
             self.log("扫描相册 (视频: %s)..." % ("包含" if include_video else "不含"))
-            items = scan_media(include_video)
+            items = scan_media(include_video, logger=self.log)
             self.items = items
             self.log("扫描到 %d 个文件" % len(items))
             if not items:
-                self.log("没扫到文件。若提示权限被拒, 到系统设置里手动授权相册权限")
+                self.log("没扫到文件。若上面显示「query 返回 null」或「未授权」, "
+                         "说明权限没生效, 去系统设置里给本 App 开相册权限")
                 return
 
             device = device_name()
