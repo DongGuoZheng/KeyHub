@@ -29,7 +29,7 @@ from kivy.uix.progressbar import ProgressBar
 from kivy.uix.widget import Widget
 
 # ===================== 常量区 (Constants-First) =====================
-__version__ = "0.3"
+__version__ = "0.4"
 APP_TITLE = "监控直播"
 PUSH_TITLE = "获取监控画面"
 # 上传目标写死, 界面上不再提供地址输入框

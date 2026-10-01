@@ -14,7 +14,7 @@ source.include_patterns = fonts/*.otf,fonts/*.ttf
 source.exclude_dirs = bin,.buildozer
 
 # version 与 version.regex 二选一, 不能同时写 (否则 buildozer 直接报错退出)
-version = 0.3
+version = 0.4
 
 # ============================================================
 # 依赖配置 (沿用已验证组合, 请勿随意改动)
