@@ -28,10 +28,11 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 
 # ===================== 常量区 (Constants-First) =====================
-__version__ = "0.1"
+__version__ = "0.2"
 APP_TITLE = "相册备份"
 DEFAULT_PORT = 8899
 UDP_PORT = 51234
+CONFIG_NAME = "server.json"     # 记住上一次成功连过的地址
 UDP_MAGIC = b"ZGGG_PHOTO_DISCOVER_V1"
 UDP_REPLY_PREFIX = "ZGGG_PHOTO_HERE_V1"
 DISCOVER_TIMEOUT = 2.0
@@ -403,6 +404,32 @@ def normalize_server(text):
     return "http://%s:%d" % (host, u.port or DEFAULT_PORT)
 
 
+def config_path():
+    """Kivy 的 App 私有数据目录; App 还没起来时退化到脚本目录"""
+    try:
+        from kivy.app import App
+        return os.path.join(App.get_running_app().user_data_dir, CONFIG_NAME)
+    except Exception:
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_NAME)
+
+
+def load_last_server():
+    """上次连过的电脑地址, 省的每次重装/重启都要重填公网 IP"""
+    try:
+        with open(config_path(), "r", encoding="utf-8") as f:
+            return json.load(f).get("base", "") or ""
+    except Exception:
+        return ""
+
+
+def save_last_server(base):
+    try:
+        with open(config_path(), "w", encoding="utf-8") as f:
+            json.dump({"base": base}, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
 def discover_servers():
     """UDP 广播发现局域网内的备份服务"""
     found = []
@@ -549,7 +576,8 @@ class RootWidget(BoxLayout):
                                  color=(0.42, 0.45, 0.5, 1), height=22))
 
         row1 = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
-        self.url_input = TextInput(text="", hint_text="电脑地址 如 192.168.1.5",
+        self.url_input = TextInput(text=load_last_server(),
+                                   hint_text="电脑地址 如 192.168.1.5 或 公网IP:端口",
                                    font_size=sp(14), multiline=False)
         if FONT:
             self.url_input.font_name = FONT
@@ -653,6 +681,7 @@ class RootWidget(BoxLayout):
         def work():
             try:
                 info = api_hello(base)
+                save_last_server(base)
                 self.log("连接成功: %s (端口 %s)" % (info.get("host"), info.get("http_port")))
             except Exception as e:
                 self.log("连接失败: %s" % e)
@@ -703,6 +732,7 @@ class RootWidget(BoxLayout):
             self.log("向电脑询问哪些还没备份...")
             try:
                 missing_keys = api_check(base, items, device)
+                save_last_server(base)
             except Exception as e:
                 self.log("比对失败: %s" % e)
                 return
