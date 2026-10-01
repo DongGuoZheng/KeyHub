@@ -18,6 +18,7 @@ import urllib.parse
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
+from kivy.metrics import dp, sp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.checkbox import CheckBox
@@ -109,8 +110,63 @@ def device_name():
         return "unknown-device"
 
 
+# 权限常量: 直接用完整字符串, 不依赖 Manifest 常量类
+PERM_MEDIA_IMAGES = "android.permission.READ_MEDIA_IMAGES"
+PERM_MEDIA_VIDEO = "android.permission.READ_MEDIA_VIDEO"
+PERM_MEDIA_VISUAL = "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+PERM_EXT_STORAGE = "android.permission.READ_EXTERNAL_STORAGE"
+PERM_GRANTED = {True: "已授权", False: "未授权", None: "未知"}
+
+
+def _perm_granted(perm):
+    """直接用 pyjnius 查授权状态: True/False, 查不了返回 None"""
+    try:
+        from jnius import autoclass
+        activity = autoclass("org.kivy.android.PythonActivity").mActivity
+        return int(activity.checkSelfPermission(perm)) == 0  # PERMISSION_GRANTED == 0
+    except Exception:
+        return None
+
+
+def _request_perms(perm_names, logger=None):
+    """直接调 Activity.requestPermissions, 绕开 p4a 的 android.permissions 模块。
+
+    为什么不用 p4a 的 request_permissions: 它内部要创建 Java 动态代理来回调结果,
+    在部分机型上抛 ClassNotFoundException: org.jnius.NativeInvocationHandler,
+    导致权限弹窗永远出不来 (实测踩坑)。直调 Activity 方法是普通 JNI 调用, 不需要代理类。
+    不监听回调: 用户在弹窗点允许后再点一次「开始备份」, 用 checkSelfPermission 复查即可。
+    """
+    def _log(m):
+        try:
+            (logger or print)(m)
+        except Exception:
+            pass
+
+    from jnius import autoclass
+    activity = autoclass("org.kivy.android.PythonActivity").mActivity
+    try:
+        activity.requestPermissions(perm_names, 10001)
+        return True
+    except Exception:
+        pass
+    try:
+        # 兜底: 手工构造 String[] (个别 pyjnius 版本 list 转数组不稳)
+        JString = autoclass("java.lang.String")
+        JArray = autoclass("java.lang.reflect.Array")
+        arr = JArray.newInstance(JString, len(perm_names))
+        for i, n in enumerate(perm_names):
+            JArray.set(arr, i, n)
+        activity.requestPermissions(arr, 10001)
+        return True
+    except Exception as e:
+        _log("申请权限失败: %r" % (e,))
+        return False
+
+
 def ensure_permissions(include_video, logger=None):
-    """Android 13+ 用 READ_MEDIA_IMAGES/VIDEO, 旧版用 READ_EXTERNAL_STORAGE"""
+    """确保相册读取权限。两组权限都申请, 系统自动忽略当前版本不认识的那个:
+    Android 13+ 认 READ_MEDIA_IMAGES/VIDEO, 12 及以下认 READ_EXTERNAL_STORAGE,
+    Android 14 还可能有"仅选中照片"的部分授权 (READ_MEDIA_VISUAL_USER_SELECTED)。"""
     def _log(m):
         try:
             (logger or print)(m)
@@ -120,39 +176,25 @@ def ensure_permissions(include_video, logger=None):
     if not IS_ANDROID:
         _log("!! 非安卓环境, 跳过权限申请")
         return True
-    try:
-        from android.permissions import request_permissions, check_permission
-        from jnius import autoclass
-        Manifest = autoclass("android.Manifest$permission")
-    except Exception as e:
-        _log("权限模块不可用: %r" % (e,))
-        return True
 
-    sdk = sdk_int()
-    names = ["READ_MEDIA_IMAGES"] if sdk >= 33 else ["READ_EXTERNAL_STORAGE"]
+    names = [PERM_MEDIA_IMAGES, PERM_EXT_STORAGE, PERM_MEDIA_VISUAL]
     if include_video:
-        names.append("READ_MEDIA_VIDEO" if sdk >= 33 else "READ_EXTERNAL_STORAGE")
-    _log("SDK=%d, 需要权限: %s" % (sdk, " / ".join(names)))
+        names.append(PERM_MEDIA_VIDEO)
 
-    missing = []
-    for n in names:
-        perm = getattr(Manifest, n, None) or n
-        try:
-            ok = bool(check_permission(perm))
-        except Exception as e:
-            ok = False
-            _log("   检查 %s 异常: %r" % (n, e))
-        _log("   %s -> %s" % (n, "已授权" if ok else "未授权"))
-        if not ok:
-            missing.append(perm)
+    granted, missing = [], []
+    for p in names:
+        st = _perm_granted(p)
+        (granted if st is True else missing).append(p)
+        _log("   %s -> %s" % (p.rsplit(".", 1)[-1], PERM_GRANTED[st]))
 
-    if not missing:
+    media_ok = any(p in granted for p in (PERM_MEDIA_IMAGES, PERM_MEDIA_VISUAL, PERM_EXT_STORAGE))
+    if media_ok:
+        _log("相册权限已就绪")
         return True
-    try:
-        request_permissions(missing)
-        _log("已发起 %d 项权限申请, 请在弹窗点允许后重试" % len(missing))
-    except Exception as e:
-        _log("申请权限失败: %r" % (e,))
+
+    _log("发起权限申请 (%d 项), 请在系统弹窗点允许" % len(missing))
+    if _request_perms(missing, logger):
+        _log("请在权限弹窗点允许, 然后再点一次「开始备份」")
     return False
 
 
@@ -380,19 +422,20 @@ FONT = FONT_PATH if os.path.exists(FONT_PATH) else None
 
 
 def mk_label(text, size=14, color=(0.13, 0.15, 0.18, 1), height=None, bold=False):
-    kw = dict(text=text, font_size=size, color=color, halign="left", valign="middle")
+    """所有尺寸走 dp/sp, 高分屏(密度>2)下不再缩成一团"""
+    kw = dict(text=text, font_size=sp(size), color=color, halign="left", valign="middle")
     if FONT:
         kw["font_name"] = FONT
     lab = Label(**kw)
     if height:
         lab.size_hint_y = None
-        lab.height = height
-    lab.bind(size=lambda *a: setattr(lab, "text_size", (lab.width - 8, None)))
+        lab.height = dp(height)
+    lab.bind(size=lambda *a: setattr(lab, "text_size", (lab.width - dp(8), None)))
     return lab
 
 
 def mk_button(text, height=44):
-    b = Button(text=text, font_size=15, size_hint_y=None, height=height)
+    b = Button(text=text, font_size=sp(15), size_hint_y=None, height=dp(height))
     if FONT:
         b.font_name = FONT
     return b
@@ -400,7 +443,7 @@ def mk_button(text, height=44):
 
 class RootWidget(BoxLayout):
     def __init__(self, **kw):
-        super().__init__(orientation="vertical", padding=14, spacing=8, **kw)
+        super().__init__(orientation="vertical", padding=dp(14), spacing=dp(8), **kw)
         self.running = False
         self.items = []
         self.cancel = False
@@ -410,15 +453,15 @@ class RootWidget(BoxLayout):
         self.add_widget(mk_label("同一 WiFi 下, 把相册备份到电脑", size=12,
                                  color=(0.42, 0.45, 0.5, 1), height=22))
 
-        row1 = BoxLayout(size_hint_y=None, height=44, spacing=6)
+        row1 = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
         self.url_input = TextInput(text="", hint_text="电脑地址 如 192.168.1.5",
-                                   font_size=14, multiline=False)
+                                   font_size=sp(14), multiline=False)
         if FONT:
             self.url_input.font_name = FONT
-        self.btn_scan = mk_button("扫描", height=44)
+        self.btn_scan = mk_button("扫描", height=48)
         self.btn_scan.size_hint_x = 0.28
         self.btn_scan.bind(on_release=self.on_discover)
-        self.btn_test = mk_button("测试", height=44)
+        self.btn_test = mk_button("测试", height=48)
         self.btn_test.size_hint_x = 0.28
         self.btn_test.bind(on_release=self.on_test)
         row1.add_widget(self.url_input)
@@ -426,26 +469,26 @@ class RootWidget(BoxLayout):
         row1.add_widget(self.btn_test)
         self.add_widget(row1)
 
-        row2 = BoxLayout(size_hint_y=None, height=38, spacing=6)
-        self.video_cb = CheckBox(size_hint_x=None, width=44)
+        row2 = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
+        self.video_cb = CheckBox(size_hint_x=None, width=dp(44))
         row2.add_widget(self.video_cb)
         row2.add_widget(mk_label("同时备份视频 (体积大, 建议 WiFi 空闲时勾选)",
                                  size=13, color=(0.35, 0.38, 0.42, 1)))
         self.add_widget(row2)
 
-        self.btn_start = mk_button("开始备份", height=52)
+        self.btn_start = mk_button("开始备份", height=56)
         self.btn_start.background_color = (0.11, 0.42, 0.75, 1)
         self.btn_start.bind(on_release=self.on_start)
         self.add_widget(self.btn_start)
 
-        self.btn_stop = mk_button("停止", height=40)
+        self.btn_stop = mk_button("停止", height=42)
         self.btn_stop.background_color = (0.75, 0.3, 0.28, 1)
         self.btn_stop.bind(on_release=self.on_stop)
         self.add_widget(self.btn_stop)
 
-        self.progress = ProgressBar(max=100, value=0, size_hint_y=None, height=16)
+        self.progress = ProgressBar(max=100, value=0, size_hint_y=None, height=dp(16))
         self.add_widget(self.progress)
-        self.status = mk_label("就绪", size=13, color=(0.2, 0.35, 0.55, 1), height=26)
+        self.status = mk_label("就绪", size=13, color=(0.2, 0.35, 0.55, 1), height=28)
         self.add_widget(self.status)
 
         self.log_label = mk_label("", size=12, color=(0.25, 0.28, 0.32, 1))
@@ -479,17 +522,8 @@ class RootWidget(BoxLayout):
         self.log("=== 环境自检 ===")
         self.log("IS_ANDROID=%s  SDK=%s" % (IS_ANDROID, sdk_int()))
         self.log("设备: %s" % device_name())
-        names = ["READ_MEDIA_IMAGES"] if sdk_int() >= 33 else ["READ_EXTERNAL_STORAGE"]
-        try:
-            from android.permissions import check_permission
-            from jnius import autoclass
-            Manifest = autoclass("android.Manifest$permission")
-            for n in names:
-                perm = getattr(Manifest, n, None) or n
-                self.log("权限 %s: %s" % (
-                    n, "已授权" if check_permission(perm) else "未授权"))
-        except Exception as e:
-            self.log("权限自检失败: %r" % (e,))
+        for p in (PERM_MEDIA_IMAGES, PERM_EXT_STORAGE, PERM_MEDIA_VISUAL):
+            self.log("权限 %s: %s" % (p.rsplit(".", 1)[-1], PERM_GRANTED[_perm_granted(p)]))
         self.log("===================")
 
     # ---------- 交互 ----------
