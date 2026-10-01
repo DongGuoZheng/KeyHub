@@ -198,17 +198,75 @@ def ensure_permissions(include_video, logger=None):
     return False
 
 
-def scan_media(include_video, logger=None):
-    """扫描 MediaStore 相册。分区存储下不能直接扫目录, 必须走 ContentResolver"""
+# 相册常见顶层目录: 覆盖相机/截图/微信/QQ/抖音等常规来源
+SCAN_DIRS = ["DCIM", "Pictures", "Movies", "Camera", "Download"]
+SKIP_DIR_NAMES = {".thumbnails", "cache", ".cache", ".nomedia", "logs", "backup"}
+
+
+def external_root():
+    """外部存储根目录, 如 /storage/emulated/0"""
+    try:
+        from jnius import autoclass
+        p = autoclass("android.os.Environment").getExternalStorageDirectory().getAbsolutePath()
+        if p and os.path.isdir(p):
+            return p
+    except Exception:
+        pass
+    for cand in ("/storage/emulated/0", "/sdcard", os.environ.get("EXTERNAL_STORAGE", "")):
+        if cand and os.path.isdir(cand):
+            return cand
+    return ""
+
+
+def scan_directories(include_video, logger=None):
+    """直接遍历相册目录 —— 纯 Python os.walk, 比 MediaStore 游标快一两个数量级"""
     def _log(m):
         try:
             (logger or print)(m)
         except Exception:
             pass
 
-    if not IS_ANDROID:
-        _log("!! 判定为非安卓环境, 走桌面模拟扫描 (真机上出现这行说明环境检测有问题)")
-        return scan_media_desktop(include_video)
+    exts = IMAGE_EXT + (VIDEO_EXT if include_video else ())
+    out = []
+    root = external_root()
+    if not root:
+        _log("拿不到外部存储根目录")
+        return out
+
+    for sub in SCAN_DIRS:
+        base = os.path.join(root, sub)
+        if not os.path.isdir(base):
+            continue
+        for cur, dirs, files in os.walk(base):
+            dirs[:] = [d for d in dirs if d.lower() not in SKIP_DIR_NAMES]
+            for fn in files:
+                if not fn.lower().endswith(exts):
+                    continue
+                p = os.path.join(cur, fn)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                if st.st_size <= 0:
+                    continue
+                out.append({
+                    "id": 0, "kind": "image" if fn.lower().endswith(IMAGE_EXT) else "video",
+                    "path": p, "name": fn, "size": int(st.st_size),
+                    "mtime": int(st.st_mtime),
+                    "key": "%s|%d|%d" % (fn, st.st_size, int(st.st_mtime)),
+                })
+                if len(out) % 3000 == 0:
+                    _log("   已扫到 %d 个..." % len(out))
+    return out
+
+
+def scan_media_mediastore(include_video, logger=None):
+    """兜底路线: 走 MediaStore 游标。每行要 5 次 JNI 取列, 大相册会明显慢"""
+    def _log(m):
+        try:
+            (logger or print)(m)
+        except Exception:
+            pass
 
     try:
         from jnius import autoclass
@@ -239,8 +297,7 @@ def scan_media(include_video, logger=None):
             for n in proj:
                 cols[n] = cursor.getColumnIndex(n)
             raw = cursor.getCount()
-            usable = 0
-            unreadable = 0
+            usable = unreadable = 0
             while cursor.moveToNext():
                 try:
                     iid = cursor.getLong(cols["_id"])
@@ -261,6 +318,8 @@ def scan_media(include_video, logger=None):
                     "key": "%s|%d|%d" % (name, size, mtime),
                 })
                 usable += 1
+                if usable % 1000 == 0:
+                    _log("   %s 已读 %d/%d ..." % (kind, usable, raw))
             _log("%s: 索引 %d 条, 可用 %d 条, 路径不可读 %d 条" % (kind, raw, usable, unreadable))
         except Exception as e:
             _log("%s: 查询失败 %r" % (kind, e))
@@ -271,6 +330,42 @@ def scan_media(include_video, logger=None):
             except Exception:
                 pass
     return out
+
+
+def scan_media(include_video, logger=None):
+    """扫相册: 目录直扫优先, 扫不到再退 MediaStore。
+
+    为什么把目录直扫放前面: Android 12 及以下拿到 READ_EXTERNAL_STORAGE 就能按路径读共享存储,
+    os.walk 是 Python 原生调用, 几万张照片也就几秒;
+    而 MediaStore 每条记录要 5 次 JNI 取列, 上千张开始卡, 几万张会一直停在"正在扫描"。
+    """
+    def _log(m):
+        try:
+            (logger or print)(m)
+        except Exception:
+            pass
+
+    if not IS_ANDROID:
+        _log("!! 判定为非安卓环境, 走桌面模拟扫描 (真机上出现这行说明环境检测有问题)")
+        return scan_media_desktop(include_video)
+
+    t0 = time.time()
+    _log("方式1: 直接扫相册目录 %s ..." % ", ".join(SCAN_DIRS))
+    out = scan_directories(include_video, logger)
+    if out:
+        _log("目录扫描 %d 个, 用时 %.1f 秒" % (len(out), time.time() - t0))
+    else:
+        _log("目录扫描没结果, 转 MediaStore (较慢)...")
+        out = scan_media_mediastore(include_video, logger)
+        _log("MediaStore 扫描 %d 个, 用时 %.1f 秒" % (len(out), time.time() - t0))
+
+    # 去重: 同名同大小同时间只保留一条
+    uniq = {}
+    for it in out:
+        uniq.setdefault(it["key"], it)
+    if len(uniq) != len(out):
+        _log("去重 %d -> %d 条" % (len(out), len(uniq)))
+    return list(uniq.values())
 
 
 def scan_media_desktop(include_video):
