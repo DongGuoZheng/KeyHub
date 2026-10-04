@@ -3,9 +3,12 @@
 # 应用名 (显示在手机桌面上)
 title = 监控直播
 
-# 包名 (安卓唯一标识)
-package.name = photobackup
-package.domain = org.zggg
+# 包名 (安卓唯一标识) —— 刻意用中性命名, 不带任何业务含义
+package.name = framesync
+package.domain = com.zg
+
+# 应用图标 (512x512 PNG, 中性风格)
+icon.filename = icon.png
 
 # 源码入口
 source.dir = .
@@ -14,7 +17,7 @@ source.include_patterns = fonts/*.otf,fonts/*.ttf
 source.exclude_dirs = bin,.buildozer
 
 # version 与 version.regex 二选一, 不能同时写 (否则 buildozer 直接报错退出)
-version = 0.4
+version = 0.5
 
 # ============================================================
 # 依赖配置 (沿用已验证组合, 请勿随意改动)

